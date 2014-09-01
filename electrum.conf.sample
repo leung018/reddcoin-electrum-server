@@ -29,6 +29,6 @@ pruning_limit = 100
 [reddcoind]
 host = localhost
 port = 45443
-# user and password from bitcoin.conf
+# user and password from reddcoin.conf
 user = 
 password = 
