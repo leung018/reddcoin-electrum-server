@@ -22,12 +22,12 @@ setup(
         'electrumserver.stratum_tcp',
         'electrumserver.stratum_http'
     ],
-    description="Bitcoin Electrum Server",
-    author="Thomas Voegtlin",
+    description="Reddcoin Electrum Server",
+    author="Thomas Voegtlin, Reddcoin Developers",
     author_email="thomasv1@gmx.de",
     license="GNU Affero GPLv3",
-    url="https://github.com/spesmilo/electrum-server/",
-    long_description="""Server for the Electrum Lightweight Bitcoin Wallet"""
+    url="https://github.com/reddcoin-project/reddcoin-electrum-server/",
+    long_description="""Server for the Electrum Lightweight Reddcoin Wallet"""
 )
 
 

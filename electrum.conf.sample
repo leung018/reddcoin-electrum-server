@@ -26,9 +26,9 @@ path =
 # for each address, history will be pruned if it is longer than this limit
 pruning_limit = 100
 
-[bitcoind]
+[reddcoind]
 host = localhost
-port = 8332
+port = 45443
 # user and password from bitcoin.conf
 user = 
 password = 

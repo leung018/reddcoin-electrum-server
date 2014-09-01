@@ -107,15 +107,15 @@ if ! [ -f $logfile ]; then
 fi
 
 
-bitcoind_user=$(read_config "user")
-if ! [ "$bitcoind_user" ]; then
-    read -p "rpcuser (from your bitcoin.conf file): " -r
-    write_config "user" $bitcoind_user
+reddcoind_user=$(read_config "user")
+if ! [ "$reddcoind_user" ]; then
+    read -p "rpcuser (from your reddcoin.conf file): " -r
+    write_config "user" $reddcoind_user
 fi
 
-bitcoind_password=$(read_config "password")
-if ! [ "$bitcoind_password" ]; then
-    read -p "rpcpassword (from your bitcoin.conf file): " -r
+reddcoind_password=$(read_config "password")
+if ! [ "$reddcoind_password" ]; then
+    read -p "rpcpassword (from your reddcoin.conf file): " -r
     write_config "password" $REPLY#
 fi
 
