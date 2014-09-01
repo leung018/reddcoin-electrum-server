@@ -27,8 +27,8 @@ path =
 pruning_limit = 100
 
 [reddcoind]
-host = localhost
-port = 45443
+host = 127.0.0.1
+port = 8332
 # user and password from reddcoin.conf
 user = 
 password = 
