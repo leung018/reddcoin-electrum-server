@@ -261,7 +261,12 @@ def parse_Transaction(vds, is_coinbase):
             # if o['address'] != "None":
             d['outputs'].append(o)
 
-    d['lockTime'] = vds.read_uint32()
+    d['locktime'] = vds.read_uint32()
+    if d['version'] >= 2:
+        d['time'] = vds.read_uint32()
+    else:
+        d['time'] = 0
+
     return d
 
 
