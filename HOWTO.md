@@ -96,7 +96,7 @@ We currently recommend reddcoind 0.9.2 stable.
 If your package manager does not supply a recent reddcoind or you prefer to compile it yourself,
 here are some pointers for Ubuntu:
 
-    $ sudo apt-get install make g++ python-leveldb libboost-all-dev libssl-dev libdb++-dev pkg-config
+    $ sudo apt-get install make g++ python-leveldb libboost-all-dev libssl-dev libdb++-dev pkg-config libminiupnpc-dev
     $ sudo su - reddcoin
     $ cd ~/src
     $ git clone https://github.com/reddcoin-project/reddcoin.git
@@ -118,9 +118,11 @@ Write this in `reddcoin.conf`:
 
     rpcuser=<rpc-username>
     rpcpassword=<rpc-password>
+    rpcallowip=127.0.0.1
+    rpcport=8332
     daemon=1
     txindex=1
-
+    staking=0
 
 If you have an existing installation of reddcoind and have not previously
 set txindex=1 you need to reindex the blockchain by running
@@ -146,7 +148,7 @@ find out the best way to do this.
 
 We will download the latest git snapshot for Electrum to configure and install it:
 
-    $ cd ~
+    $ cd ~/src
     $ git clone https://github.com/reddcoin-project/reddcoin-electrum-server.git
     $ cd reddcoin-electrum-server
     $ sudo configure
