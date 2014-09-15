@@ -197,7 +197,7 @@ It's recommended to fetch a pre-processed leveldb from the net.
 The "configure" script above will offer you to download a database with pruning limit 100.
 
 You can fetch a recent copy of electrum leveldb database with pruning limits of 100 at:
-http://wallet.reddcoin.com/electrum.tar.gz
+http://reddwallet.org/electrum.tar.gz
 
 Alternatively, if you have the time and nerve, you can import the blockchain yourself.
 
