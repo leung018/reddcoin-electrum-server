@@ -4,7 +4,7 @@ Official Reddcoin Electrum Server
 * Author: Thomas Voegtlin (ThomasV on the bitcointalk forum)
 * Author: Larry Ren (laudney) forked for Reddcoin
 * Language: Python
-* Homepage: http://reddwallet.org
+* Homepage: https://wallet.reddcoin.com
 
 Features
 --------
