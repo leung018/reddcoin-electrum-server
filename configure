@@ -110,13 +110,13 @@ fi
 reddcoind_user=$(read_config "user")
 if ! [ "$reddcoind_user" ]; then
     read -p "rpcuser (from your reddcoin.conf file): " -r
-    write_config "user" $reddcoind_user
+    write_config "user" $REPLY
 fi
 
 reddcoind_password=$(read_config "password")
 if ! [ "$reddcoind_password" ]; then
     read -p "rpcpassword (from your reddcoin.conf file): " -r
-    write_config "password" $REPLY#
+    write_config "password" $REPLY
 fi
 
 
