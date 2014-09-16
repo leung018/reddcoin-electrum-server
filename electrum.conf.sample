@@ -2,22 +2,20 @@
 # username for running the daemon
 username = reddcoin
 # hostname. set it to a FQDN in order to be reached from outside
-# e.g. reddwallet.org
-host =
+host = YOUR_DOMAIN.COM
 # ports
 electrum_rpc_port = 8000
 stratum_tcp_port = 50001
 stratum_tcp_ssl_port = 50002
-report_host = reddwallet.org
+report_host = YOUR_DOMAIN.COM
 report_stratum_tcp_port = 50001
 report_stratum_tcp_ssl_port = 50002
-password =
+password = YOUR_SERVER_PASSWORD
 banner = Welcome to Electrum!
 banner_file = /etc/electrum.banner
 irc = yes
-# use your hostname above with . replaced by _
-#  e.g. reddwallet_org
-irc_nick =
+# use your host name above with . replaced by _
+irc_nick = YOUR_DOMAIN_COM
 ssl_certfile = /home/reddcoin/electrum-server.crt
 ssl_keyfile = /home/reddcoin/electrum-server.key
 logfile = /var/log/electrum.log
