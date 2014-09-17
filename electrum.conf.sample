@@ -5,17 +5,26 @@ username = reddcoin
 host = YOUR_DOMAIN.COM
 # ports
 electrum_rpc_port = 8000
+password = YOUR_LOCAL_RPC_PASSWORD
+
 stratum_tcp_port = 50001
 stratum_tcp_ssl_port = 50002
+stratum_http_port = 8081
+stratum_http_ssl_port = 8082
+
 report_host = YOUR_DOMAIN.COM
 report_stratum_tcp_port = 50001
 report_stratum_tcp_ssl_port = 50002
-password = YOUR_SERVER_PASSWORD
+report_stratum_http_port = 8081
+report_stratum_http_ssl_port = 8082
+
 banner = Welcome to Electrum!
 banner_file = /etc/electrum.banner
-irc = yes
+
 # use your host name above with . replaced by _
 irc_nick = YOUR_DOMAIN_COM
+irc = yes
+
 ssl_certfile = /home/reddcoin/electrum-server.crt
 ssl_keyfile = /home/reddcoin/electrum-server.key
 logfile = /var/log/electrum.log
