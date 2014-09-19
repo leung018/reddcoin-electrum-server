@@ -29,6 +29,7 @@ global SCRIPT_ADDRESS
 PUBKEY_ADDRESS = 61
 SCRIPT_ADDRESS = 5
 
+
 def rev_hex(s):
     return s.decode('hex')[::-1].encode('hex')
 

@@ -47,8 +47,8 @@ except ImportError:
     fcntl = None
 
 
-from processor import Session
-from utils import random_string, print_log
+from .processor import Session
+from .utils import random_string, print_log
 
 
 def get_version(request):

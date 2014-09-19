@@ -28,15 +28,15 @@ import imp
 
 
 if os.path.dirname(os.path.realpath(__file__)) == os.getcwd():
-    imp.load_module('electrumserver', *imp.find_module('src'))
+    imp.load_module('electrum_server', *imp.find_module('src'))
   
 
-from electrumserver import storage, networks, utils
-from electrumserver.processor import Dispatcher, print_log
-from electrumserver.server_processor import ServerProcessor
-from electrumserver.blockchain_processor import BlockchainProcessor
-from electrumserver.stratum_tcp import TcpServer
-from electrumserver.stratum_http import HttpServer
+from electrum_server import storage, networks, utils
+from electrum_server.processor import Dispatcher, print_log
+from electrum_server.server_processor import ServerProcessor
+from electrum_server.blockchain_processor import BlockchainProcessor
+from electrum_server.stratum_tcp import TcpServer
+from electrum_server.stratum_http import HttpServer
 
 
 logging.basicConfig()

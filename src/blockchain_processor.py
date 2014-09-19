@@ -10,10 +10,10 @@ import threading
 import urllib
 
 import deserialize
-from processor import Processor, print_log
-from utils import *
-from storage import Storage
-from utils import logger
+from .processor import Processor, print_log
+from .utils import *
+from .storage import Storage
+
 
 class BlockchainProcessor(Processor):
 

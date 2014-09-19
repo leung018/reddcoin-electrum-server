@@ -1,29 +1,57 @@
 from setuptools import setup
+import os
+
+
+basedir = os.path.abspath(os.path.dirname(__file__))
+
+
+def read_file(filename):
+    f = open(os.path.join(basedir, filename))
+    try:
+        return f.read()
+    finally:
+        f.close()
+
 
 setup(
-    name="electrum-server",
+    name="reddcoin-electrum-server",
     version="0.9",
     scripts=['run_electrum_server', 'electrum-server'],
     install_requires=['plyvel', 'jsonrpclib', 'irc'],
-    package_dir={'electrumserver': 'src'},
+    package_dir={'electrum_server': 'src'},
     py_modules=[
-        'electrumserver.__init__',
-        'electrumserver.utils',
-        'electrumserver.storage',
-        'electrumserver.deserialize',
-        'electrumserver.networks',
-        'electrumserver.blockchain_processor',
-        'electrumserver.server_processor',
-        'electrumserver.processor',
-        'electrumserver.version',
-        'electrumserver.ircthread',
-        'electrumserver.stratum_tcp',
-        'electrumserver.stratum_http'
+        'electrum_server.__init__',
+        'electrum_server.utils',
+        'electrum_server.storage',
+        'electrum_server.deserialize',
+        'electrum_server.networks',
+        'electrum_server.blockchain_processor',
+        'electrum_server.server_processor',
+        'electrum_server.processor',
+        'electrum_server.version',
+        'electrum_server.ircthread',
+        'electrum_server.stratum_tcp',
+        'electrum_server.stratum_http'
     ],
-    description="Reddcoin Electrum Server",
+    description="Reddcoin Electrum server",
     author="Thomas Voegtlin, Larry Ren",
     author_email="thomasv1@gmx.de, ren@reddcoin.com",
+    maintainer="Larry Ren",
+    maintainer_email="ren@reddcoin.com",
     license="GNU GPLv3",
-    url="https://reddwallet.org",
-    long_description="""Reddcoin Electrum Server"""
+    url="https://wallet.reddcoin.com",
+    long_description=read_file('README.rst'),
+    platform="All",
+    classifiers=[
+        'Environment :: Console',
+        'Development Status :: 4 - Beta',
+        'Intended Audience :: Developers',
+        'Intended Audience :: System Administrators',
+        'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
+        'Programming Language :: Python :: 2',
+        'Programming Language :: Python :: 3',
+        'Operating System :: OS Independent',
+        'Topic :: Office/Business :: Financial',
+        'Topic :: Software Development :: Libraries :: Python Modules',
+    ],
 )

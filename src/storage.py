@@ -4,8 +4,8 @@ import hashlib
 import os
 import sys
 
-from processor import print_log, logger
-from utils import bc_address_to_hash_160, hash_160_to_pubkey_address, hex_to_int, int_to_hex, Hash
+from .processor import print_log, logger
+from .utils import bc_address_to_hash_160, hash_160_to_pubkey_address, hex_to_int, int_to_hex, Hash
 
 global GENESIS_HASH
 GENESIS_HASH = 'b868e0d95a3c3c0e0dadc67ee587aaf9dc8acbf99e3b4b3110fad4eb74c1decc'
@@ -17,6 +17,7 @@ Patricia tree for hashing unspents
 
 DEBUG = 0
 KEYLENGTH = 20 + 32 + 4   #56
+
 
 class Storage(object):
 

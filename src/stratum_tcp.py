@@ -5,16 +5,16 @@ import select
 import threading
 import time
 import sys
+import ssl
 
-from processor import Session, Dispatcher
-from utils import print_log, logger
+from .processor import Session, Dispatcher
+from .utils import print_log, logger
 
 
 READ_ONLY = select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR
 READ_WRITE = READ_ONLY | select.POLLOUT
 TIMEOUT = 100
 
-import ssl
 
 class TcpSession(Session):
 

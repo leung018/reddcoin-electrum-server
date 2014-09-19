@@ -4,13 +4,10 @@ import threading
 import time
 import Queue
 
-
-from processor import Processor
-from utils import Hash, print_log
-from version import VERSION
-from utils import logger
-from ircthread import IrcThread
-
+from .processor import Processor
+from .utils import Hash, print_log, logger
+from .version import VERSION
+from .ircthread import IrcThread
 
 
 class ServerProcessor(Processor):

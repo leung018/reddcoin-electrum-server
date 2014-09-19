@@ -5,8 +5,8 @@ import threading
 import time
 import sys
 
-from utils import random_string, timestr, print_log
-from utils import logger
+from .utils import random_string, timestr, print_log, logger
+
 
 class Shared:
 
