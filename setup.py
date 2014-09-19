@@ -13,9 +13,10 @@ def read_file(filename):
         f.close()
 
 
+VERSION = '0.9.0'
 setup(
     name="reddcoin-electrum-server",
-    version="0.9",
+    version=VERSION,
     scripts=['run_electrum_server', 'electrum-server'],
     install_requires=['plyvel', 'jsonrpclib', 'irc'],
     package_dir={'electrum_server': 'src'},
@@ -40,8 +41,9 @@ setup(
     maintainer_email="ren@reddcoin.com",
     license="GNU Affero GPLv3",
     url="https://wallet.reddcoin.com",
+    download_url="https://pypi.python.org/packages/source/l/reddcoin-electrum-server/reddcoin-electrum-server-%s.tar.gz" % VERSION,
     long_description=read_file('README.rst'),
-    platform="All",
+    platforms="All",
     classifiers=[
         'Environment :: Console',
         'Development Status :: 4 - Beta',
