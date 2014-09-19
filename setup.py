@@ -17,7 +17,7 @@ VERSION = '0.9.0'
 setup(
     name="reddcoin-electrum-server",
     version=VERSION,
-    scripts=['run_electrum_server', 'electrum-server'],
+    scripts=['run_electrum_server', 'electrum-server', 'electrum-configure'],
     install_requires=['plyvel', 'jsonrpclib', 'irc'],
     package_dir={'electrum_server': 'src'},
     py_modules=[

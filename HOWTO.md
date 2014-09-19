@@ -151,7 +151,7 @@ We will download the latest git snapshot for Electrum to configure and install i
     $ cd ~/src
     $ git clone https://github.com/reddcoin-project/reddcoin-electrum-server.git
     $ cd reddcoin-electrum-server
-    $ sudo configure
+    $ sudo electrum-configure
     $ sudo python setup.py install
 
 See the INSTALL file for more information about the configure and install commands. 
@@ -194,7 +194,7 @@ The section in the electrum server configuration file (see step 10) looks like t
 ### Step 7. Import blockchain into the database or download it
 
 It's recommended to fetch a pre-processed leveldb from the net. 
-The "configure" script above will offer you to download a database with pruning limit 100.
+The "electrum-configure" script above will offer you to download a database with pruning limit 100.
 
 You can fetch a recent copy of electrum leveldb database with pruning limits of 100 at:
 http://reddwallet.org/electrum.tar.gz
@@ -264,7 +264,7 @@ Electrum reads a config file (/etc/electrum.conf) when starting up. This
 file includes the database setup, reddcoind RPC setup, and a few other
 options.
 
-The "configure" script listed above will create a config file at /etc/electrum.conf
+The "electrum-configure" script listed above will create a config file at /etc/electrum.conf
 which you can edit to modify the settings.
 
 Go through the config options and set them to your liking.
@@ -276,7 +276,7 @@ Electrum server currently needs quite a few file handles to use leveldb. It also
 file handles for each connection made to the server. It's good practice to increase the
 open files limit to 64k. 
 
-The "configure" script will take care of this and ask you to create a user for running electrum-server.
+The "electrum-configure" script will take care of this and ask you to create a user for running electrum-server.
 If you're using user reddcoin to run electrum and have added it manually like shown in this HOWTO run
 the following code to add the limits to your /etc/security/limits.conf:
 
