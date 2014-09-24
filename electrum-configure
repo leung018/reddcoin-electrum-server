@@ -86,6 +86,7 @@ fi
 
 # download database
 if [ ! -d $path ]; then
+    mkdir -p $path
     echo "Database not found in $path."
     read -p "Do you want to download it from the Electrum foundry to $path ? " -n 1 -r
     mkdir -p $path
