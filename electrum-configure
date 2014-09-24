@@ -86,11 +86,11 @@ fi
 
 # download database
 if [ ! -d $path ]; then
+    mkdir -p $path
     echo "Database not found in $path."
     read -p "Do you want to download it from the Electrum foundry to $path ? " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-	mkdir -p $path
 	wget -O - "http://reddwallet.org/electrum.tar.gz" | tar --extract --gunzip --strip-components 1 --directory $path --file -
     fi
 fi
