@@ -70,10 +70,10 @@ class Processor(threading.Thread):
                 result = self.process(request)
                 self.push_response(session, {'id': msg_id, 'result': result})
             except BaseException, e:
-                self.push_response(session, {'id': msg_id, 'error':str(e)})
+                self.push_response(session, {'id': msg_id, 'error': str(e)})
             except:
                 logger.error("process error", exc_info=True)
-                self.push_response(session, {'id': msg_id, 'error':'unknown error'})
+                self.push_response(session, {'id': msg_id, 'error': 'unknown error'})
 
         self.close()
 
@@ -136,7 +136,7 @@ class RequestDispatcher(threading.Thread):
             try:
                 self.do_dispatch(session, request)
             except:
-                logger.error('dispatch',exc_info=True)
+                logger.error('dispatch', exc_info=True)
 
             if time.time() - lastgc > 60.0:
                 self.collect_garbage()
@@ -174,7 +174,6 @@ class RequestDispatcher(threading.Thread):
             except:
                 pass
 
-
     def get_sessions(self):
         with self.lock:
             r = self.sessions.values()
@@ -197,7 +196,6 @@ class RequestDispatcher(threading.Thread):
                 session.stop()
 
 
-
 class Session:
 
     def __init__(self, dispatcher):
@@ -213,11 +211,10 @@ class Session:
         self.time = time.time()
         threading.Timer(2, self.info).start()
 
-
     def key(self):
         return self.name + self.address
 
-    # Debugging method. Doesn't need to be threadsafe.
+    # Debugging method. Doesn't need to be thread-safe.
     def info(self):
         if self.subscriptions:
             print_log("%4s" % self.name,
@@ -235,15 +232,12 @@ class Session:
         self.dispatcher.remove_session(self)
         self.stop_subscriptions()
 
-
     def shutdown(self):
         pass
-
 
     def stopped(self):
         with self.lock:
             return self._stopped
-
 
     def subscribe_to_service(self, method, params):
         if self.stopped():
@@ -252,8 +246,7 @@ class Session:
         self.bp.do_subscribe(method, params, self)
         with self.lock:
             if (method, params) not in self.subscriptions:
-                self.subscriptions.append((method,params))
-
+                self.subscriptions.append((method, params))
 
     def stop_subscriptions(self):
         with self.lock:

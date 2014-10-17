@@ -49,6 +49,7 @@ if os.getuid() == 0:
     print "Run the install script to create a non-privileged user."
     sys.exit()
 
+
 def attempt_read_config(config, filename):
     try:
         with open(filename, 'r') as f:
@@ -56,12 +57,14 @@ def attempt_read_config(config, filename):
     except IOError:
         pass
 
+
 def load_banner(config):
     try:
         with open(config.get('server', 'banner_file'), 'r') as f:
             config.set('server', 'banner', f.read())
     except IOError:
         pass
+
 
 def setup_network_params(config):
     type = config.get('network', 'type')
@@ -76,6 +79,7 @@ def setup_network_params(config):
         utils.SCRIPT_ADDRESS = config.getint('network', 'script_address')
     if config.has_option('network', 'genesis_hash'):
         storage.GENESIS_HASH = config.get('network', 'genesis_hash')
+
 
 def create_config(filename=None):
     config = ConfigParser.ConfigParser()
@@ -153,6 +157,7 @@ def cmd_banner_update():
     load_banner(dispatcher.shared.config)
     return True
 
+
 def cmd_getinfo():
     return {
         'blocks': chain_proc.storage.height,
@@ -160,7 +165,8 @@ def cmd_getinfo():
         'sessions': len(dispatcher.request_dispatcher.get_sessions()),
         'watched': len(chain_proc.watched_addresses),
         'cached': len(chain_proc.history_cache),
-        }
+    }
+
 
 def cmd_sessions():
     return map(lambda s: {"time": s.time,
@@ -170,14 +176,18 @@ def cmd_sessions():
                           "subscriptions": len(s.subscriptions)},
                dispatcher.request_dispatcher.get_sessions())
 
+
 def cmd_numsessions():
     return len(dispatcher.request_dispatcher.get_sessions())
+
 
 def cmd_peers():
     return server_proc.peers.keys()
 
+
 def cmd_numpeers():
     return len(server_proc.peers)
+
 
 def cmd_debug(s):
     if s:
@@ -237,7 +247,6 @@ if __name__ == '__main__':
         print "server already running"
         sys.exit(1)
 
-
     print_log("Starting Reddcoin Electrum server on", host)
 
     # Create hub
@@ -246,12 +255,12 @@ if __name__ == '__main__':
 
     # handle termination signals
     import signal
-    def handler(signum = None, frame = None):
+
+    def handler(signum=None, frame=None):
         print_log('Signal handler called with signal', signum)
         shared.stop()
     for sig in [signal.SIGTERM, signal.SIGHUP, signal.SIGQUIT]:
         signal.signal(sig, handler)
-
 
     # Create and register processors
     chain_proc = BlockchainProcessor(config, shared)
@@ -280,8 +289,6 @@ if __name__ == '__main__':
 
     for server in transports:
         server.start()
-
-    
 
     from SimpleXMLRPCServer import SimpleXMLRPCServer
     server = SimpleXMLRPCServer(('localhost', electrum_rpc_port), allow_none=True, logRequests=False)

@@ -35,7 +35,7 @@ class TcpSession(Session):
         else:
             self._connection = connection
 
-        self.address = address[0] + ":%d"%address[1]
+        self.address = address[0] + ":%d" % address[1]
         self.name = "TCP " if not use_ssl else "SSL "
         self.timeout = 1000
         self.dispatcher.add_session(self)
@@ -43,7 +43,6 @@ class TcpSession(Session):
         self.message = ''
         self.retry_msg = ''
         self.handshake = not self.use_ssl
-
 
     def check_do_handshake(self):
         if self.handshake:
@@ -61,8 +60,6 @@ class TcpSession(Session):
 
         self.poller.modify(self.raw_connection, READ_ONLY)
         self.handshake = True
-
-
 
     def connection(self):
         if self.stopped():
@@ -94,8 +91,6 @@ class TcpSession(Session):
             logger.error('send_response:' + str(e))
             return
 
-
-
     def parse_message(self):
 
         message = self.message
@@ -108,9 +103,6 @@ class TcpSession(Session):
         raw_command = message[0:raw_buffer].strip()
         self.message = message[raw_buffer + 1:]
         return raw_command
-
-
-
 
 
 class TcpServer(threading.Thread):
@@ -129,10 +121,6 @@ class TcpServer(threading.Thread):
 
         self.fd_to_session = {}
         self.buffer_size = 4096
-
-
-
-
 
     def handle_command(self, raw_command, session):
         try:
@@ -154,13 +142,8 @@ class TcpServer(threading.Thread):
             ## sleep a bit to prevent a single session from DOSing the queue
             #time.sleep(0.01)
 
-
-
-
-
     def run(self):
-
-        print_log( ("SSL" if self.use_ssl else "TCP") + " server started on port %d"%self.port)
+        print_log(("SSL" if self.use_ssl else "TCP") + " server started on port %d" % self.port)
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.setblocking(0)
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -182,15 +165,13 @@ class TcpServer(threading.Thread):
             # this will close the socket
             session.stop()
 
-
         redo = []
-
         while not self.shared.stopped():
 
             if self.shared.paused():
                 sessions = self.fd_to_session.keys()
                 if sessions:
-                    logger.info("closing %d sessions"%len(sessions))
+                    logger.info("closing %d sessions" % len(sessions))
                 for fd in sessions:
                     stop_session(fd)
                 time.sleep(1)
@@ -220,7 +201,8 @@ class TcpServer(threading.Thread):
                         connection, address = server.accept()
                         try:
                             session = TcpSession(self.dispatcher, poller, connection, address, 
-                                                 use_ssl=self.use_ssl, ssl_certfile=self.ssl_certfile, ssl_keyfile=self.ssl_keyfile)
+                                                 use_ssl=self.use_ssl, ssl_certfile=self.ssl_certfile,
+                                                 ssl_keyfile=self.ssl_keyfile)
                         except BaseException as e:
                             logger.error("cannot start TCP session" + str(e) + ' ' + repr(address))
                             connection.close()
@@ -228,7 +210,7 @@ class TcpServer(threading.Thread):
 
                         connection = session._connection
                         connection.setblocking(0)
-                        self.fd_to_session[ connection.fileno() ] = session
+                        self.fd_to_session[connection.fileno()] = session
                         poller.register(connection, READ_ONLY)
                         try:
                             session.check_do_handshake()
@@ -254,7 +236,7 @@ class TcpServer(threading.Thread):
 
                     if data:
                         if len(data) == self.buffer_size:
-                            redo.append( (fd, flag) )
+                            redo.append((fd, flag))
 
                         session.message += data
                         while True:
@@ -273,7 +255,6 @@ class TcpServer(threading.Thread):
                 elif flag & select.POLLHUP:
                     print_log('client hung up', address)
                     stop_session(fd)
-
 
                 elif flag & select.POLLOUT:
                     # Socket is ready to send data, if there is any to send.
@@ -296,11 +277,9 @@ class TcpServer(threading.Thread):
                         
                     session.retry_msg = next_msg[sent:]
 
-
                 elif flag & select.POLLERR:
                     print_log('handling exceptional condition for', session.address)
                     stop_session(fd)
-
 
                 elif flag & select.POLLNVAL:
                     print_log('invalid request', session.address)

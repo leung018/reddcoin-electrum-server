@@ -347,7 +347,6 @@ class HttpSession(Session):
         self.pending_responses.put(response)
 
 
-
 class HttpServer(threading.Thread):
     def __init__(self, dispatcher, host, port, use_ssl, certfile, keyfile):
         self.shared = dispatcher.shared
