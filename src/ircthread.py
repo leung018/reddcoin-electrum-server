@@ -1,20 +1,21 @@
 import re
 import time
-import socket
-import threading
 import irc.client
+import gevent
+from gevent import socket, Greenlet
+
 from .utils import logger, Hash
 from .version import VERSION
 
 out_msg = []
 
 
-class IrcThread(threading.Thread):
+class IrcThread(Greenlet):
 
-    def __init__(self, processor, config):
-        threading.Thread.__init__(self)
+    def __init__(self, processor, config, queue):
+        Greenlet.__init__(self)
         self.processor = processor
-        self.daemon = True
+        self.queue = queue
         self.stratum_tcp_port = config.get('server', 'stratum_tcp_port')
         self.stratum_http_port = config.get('server', 'stratum_http_port')
         self.stratum_tcp_ssl_port = config.get('server', 'stratum_tcp_ssl_port')
@@ -49,23 +50,19 @@ class IrcThread(threading.Thread):
             s += 'p' + self.pruning_limit + ' '
 
         def add_port(letter, number):
-            DEFAULT_PORTS = {'t':'50001', 's':'50002', 'h':'8081', 'g':'8082'}
+            DEFAULT_PORTS = {'t': '50001', 's': '50002', 'h': '8081', 'g': '8082'}
             if not number: return ''
             if DEFAULT_PORTS[letter] == number:
                 return letter + ' '
             else:
                 return letter + number + ' '
 
-        s += add_port('t',self.stratum_tcp_port)
-        s += add_port('h',self.stratum_http_port)
-        s += add_port('s',self.stratum_tcp_ssl_port)
-        s += add_port('g',self.stratum_http_ssl_port)
+        s += add_port('t', self.stratum_tcp_port)
+        s += add_port('h', self.stratum_http_port)
+        s += add_port('s', self.stratum_tcp_ssl_port)
+        s += add_port('g', self.stratum_http_ssl_port)
         return s
 
-    def start(self, queue):
-        self.queue = queue
-        threading.Thread.start(self)
- 
     def on_connect(self, connection, event):
         connection.join("#reddcoin-electrum")
 
@@ -105,9 +102,9 @@ class IrcThread(threading.Thread):
             if s.startswith("E_"):
                 connection.who(s)
 
-    def run(self):
+    def _run(self):
         while self.processor.shared.paused():
-            time.sleep(1)
+            gevent.sleep(1)
 
         self.ircname = self.host + ' ' + self.getname()
         logger.info("joining IRC")
@@ -118,7 +115,7 @@ class IrcThread(threading.Thread):
                 c = client.server().connect('irc.freenode.net', 6667, self.nick, self.password, ircname=self.ircname)
             except irc.client.ServerConnectionError:
                 logger.error('irc', exc_info=True)
-                time.sleep(10)
+                gevent.sleep(10)
                 continue
 
             c.add_global_handler("welcome", self.on_connect)
@@ -135,7 +132,7 @@ class IrcThread(threading.Thread):
                 client.process_forever()
             except BaseException as e:
                 logger.error('irc', exc_info=True)
-                time.sleep(10)
+                gevent.sleep(10)
                 continue
 
         logger.info("quitting IRC")

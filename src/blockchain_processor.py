@@ -1,13 +1,15 @@
 import ast
 import hashlib
-from json import dumps, loads
 import os
-from Queue import Queue
 import random
 import sys
 import time
-import threading
 import urllib
+from json import dumps, loads
+import gevent
+from gevent import Greenlet
+from gevent.queue import Queue
+from gevent.lock import Semaphore
 
 import deserialize
 from .processor import Processor, print_log
@@ -20,12 +22,12 @@ class BlockchainProcessor(Processor):
     def __init__(self, config, shared):
         Processor.__init__(self)
 
-        self.mtimes = {} # monitoring
+        self.mtimes = {}  # monitoring
         self.shared = shared
         self.config = config
         self.up_to_date = False
 
-        self.watch_lock = threading.Lock()
+        self.watch_lock = Semaphore()
         self.watch_blocks = []
         self.watch_headers = []
         self.watched_addresses = {}
@@ -33,7 +35,7 @@ class BlockchainProcessor(Processor):
         self.history_cache = {}
         self.max_cache_size = 100000
         self.chunk_cache = {}
-        self.cache_lock = threading.Lock()
+        self.cache_lock = Semaphore()
         self.headers_data = ''
         self.headers_path = config.get('leveldb', 'path')
 
@@ -41,7 +43,7 @@ class BlockchainProcessor(Processor):
         self.mempool_addresses = {}
         self.mempool_hist = {}
         self.mempool_hashes = set([])
-        self.mempool_lock = threading.Lock()
+        self.mempool_lock = Semaphore()
 
         self.address_queue = Queue()
 
@@ -51,7 +53,7 @@ class BlockchainProcessor(Processor):
             self.test_reorgs = False
         self.storage = Storage(config, shared, self.test_reorgs)
 
-        self.dblock = threading.Lock()
+        self.dblock = Semaphore()
 
         self.reddcoind_url = 'http://%s:%s@%s:%s/' % (
             config.get('reddcoind', 'user'),
@@ -65,9 +67,8 @@ class BlockchainProcessor(Processor):
         # catch_up headers
         self.init_headers(self.storage.height)
 
-        self.blockchain_thread = threading.Thread(target = self.do_catch_up)
+        self.blockchain_thread = Greenlet(self.do_catch_up)
         self.blockchain_thread.start()
-
 
     def do_catch_up(self):
 
@@ -83,9 +84,7 @@ class BlockchainProcessor(Processor):
             if self.shared.paused():
                 print_log("reddcoind is responding")
                 self.shared.unpause()
-            time.sleep(10)
-
-
+            gevent.sleep(10)
 
     def mtime(self, name):
         now = time.time()
@@ -98,12 +97,13 @@ class BlockchainProcessor(Processor):
     def print_mtime(self):
         s = ''
         for k, v in self.mtimes.items():
-            s += k+':'+"%.2f"%v+' '
+            s += k + ':' + "%.2f" % v + ' '
         print_log(s)
 
-
-    def reddcoind(self, method, params=[]):
+    def reddcoind(self, method, params=None):
+        if params is None: params = []
         postdata = dumps({"method": method, 'params': params, 'id': 'jsonrpc'})
+        respdata = None
         while True:
             try:
                 respdata = urllib.urlopen(self.reddcoind_url, postdata).read()
@@ -111,7 +111,7 @@ class BlockchainProcessor(Processor):
             except:
                 print_log("cannot reach reddcoind...")
                 self.shared.pause()
-                time.sleep(10)
+                gevent.sleep(10)
                 if self.shared.stopped():
                     # this will end the thread
                     raise
@@ -121,7 +121,6 @@ class BlockchainProcessor(Processor):
         if r['error'] is not None:
             raise BaseException(r['error'])
         return r.get('result')
-
 
     def block2header(self, b):
         return {
@@ -144,7 +143,7 @@ class BlockchainProcessor(Processor):
         self.headers_filename = os.path.join(self.headers_path, 'blockchain_headers')
 
         if os.path.exists(self.headers_filename):
-            height = os.path.getsize(self.headers_filename)/80 - 1   # the current height
+            height = os.path.getsize(self.headers_filename) / 80 - 1  # the current height
             if height > 0:
                 prev_hash = self.hash_header(self.read_header(height))
             else:
@@ -207,7 +206,7 @@ class BlockchainProcessor(Processor):
             self.flush_headers()
 
         with self.cache_lock:
-            chunk_index = header.get('block_height')/2016
+            chunk_index = header.get('block_height') / 2016
             if self.chunk_cache.get(chunk_index):
                 self.chunk_cache.pop(chunk_index)
 
@@ -248,7 +247,6 @@ class BlockchainProcessor(Processor):
             print_log("ERROR: cannot parse", txid)
             return None
 
-
     def get_history(self, addr, cache_only=False):
         with self.cache_lock:
             hist = self.history_cache.get(addr)
@@ -262,7 +260,7 @@ class BlockchainProcessor(Processor):
                 hist = self.storage.get_history(addr)
                 is_known = True
             except:
-                logger.error("error get_history",exc_info=True)
+                logger.error("error get_history", exc_info=True)
                 raise
             if hist:
                 is_known = True
@@ -273,7 +271,7 @@ class BlockchainProcessor(Processor):
         # add memory pool
         with self.mempool_lock:
             for txid, delta in self.mempool_hist.get(addr, []):
-                hist.append({'tx_hash':txid, 'height':0})
+                hist.append({'tx_hash': txid, 'height': 0})
 
         # add something to distinguish between unused and empty addresses
         if hist == [] and is_known:
@@ -286,14 +284,12 @@ class BlockchainProcessor(Processor):
             self.history_cache[addr] = hist
         return hist
 
-
     def get_unconfirmed_value(self, addr):
         v = 0
         with self.mempool_lock:
             for txid, delta in self.mempool_hist.get(addr, []):
                 v += delta
         return v
-
 
     def get_status(self, addr, cache_only=False):
         tx_points = self.get_history(addr, cache_only)
@@ -310,7 +306,6 @@ class BlockchainProcessor(Processor):
         return hashlib.sha256(status).digest().encode('hex')
 
     def get_merkle(self, tx_hash, height):
-
         block_hash = self.reddcoind('getblockhash', [height])
         b = self.reddcoind('getblock', [block_hash])
         tx_list = b.get('tx')
@@ -337,7 +332,6 @@ class BlockchainProcessor(Processor):
 
         return {"block_height": height, "merkle": s, "pos": tx_pos}
 
-
     def add_to_history(self, addr, tx_hash, tx_pos, tx_height):
         # keep it sorted
         s = self.serialize_item(tx_hash, tx_pos, tx_height) + 40*chr(0)
@@ -361,11 +355,6 @@ class BlockchainProcessor(Processor):
         txo = (tx_hash + int_to_hex(tx_pos, 4)).decode('hex')
         self.batch_txio[txo] = addr
 
-
-
-
-
-
     def deserialize_block(self, block):
         txlist = block.get('tx')
         tx_hashes = []  # ordered txids
@@ -385,10 +374,7 @@ class BlockchainProcessor(Processor):
             is_coinbase = False
         return tx_hashes, txdict
 
-
-
     def import_block(self, block, block_hash, block_height, sync, revert=False):
-
         touched_addr = set([])
 
         # deserialize transactions
@@ -418,13 +404,12 @@ class BlockchainProcessor(Processor):
             self.storage.write_undo_info(block_height, self.reddcoind_height, undo_info)
 
         # add the max
-        self.storage.db_undo.put('height', repr( (block_hash, block_height, self.storage.db_version) ))
+        self.storage.db_undo.put('height', repr((block_hash, block_height, self.storage.db_version)))
 
         for addr in touched_addr:
             self.invalidate_cache(addr)
 
         self.storage.update_hashes()
-
 
     def add_request(self, session, request):
         # see if we can get if from cache. if not, add request to queue
@@ -439,7 +424,6 @@ class BlockchainProcessor(Processor):
             self.queue.put((session, request))
         else:
             self.push_response(session, {'id': message_id, 'result': result})
-
 
     def do_subscribe(self, method, params, session):
         with self.watch_lock:
@@ -459,7 +443,6 @@ class BlockchainProcessor(Processor):
                 elif session not in l:
                     l.append(session)
 
-
     def do_unsubscribe(self, method, params, session):
         with self.watch_lock:
             if method == 'blockchain.numblocks.subscribe':
@@ -478,12 +461,10 @@ class BlockchainProcessor(Processor):
                 if session in l:
                     print_log("error rc!!")
                     self.shared.stop()
-                if l == []:
+                if len(l) == 0:
                     self.watched_addresses.pop(addr)
 
-
     def process(self, request, cache_only=False):
-        
         message_id = request['id']
         method = request['method']
         params = request.get('params', [])
@@ -512,7 +493,7 @@ class BlockchainProcessor(Processor):
             address = str(params[0])
             confirmed = self.storage.get_balance(address)
             unconfirmed = self.get_unconfirmed_value(address)
-            result = { 'confirmed':confirmed, 'unconfirmed':unconfirmed }
+            result = {'confirmed': confirmed, 'unconfirmed': unconfirmed}
 
         elif method == 'blockchain.address.get_proof':
             address = str(params[0])
@@ -571,7 +552,6 @@ class BlockchainProcessor(Processor):
 
         return result
 
-
     def getfullblock(self, block_hash):
         block = self.reddcoind('getblock', [block_hash])
 
@@ -586,10 +566,11 @@ class BlockchainProcessor(Processor):
             i += 1
 
         postdata = dumps(rawtxreq)
+        respdata = None
         try:
             respdata = urllib.urlopen(self.reddcoind_url, postdata).read()
         except:
-            logger.error("reddcoind error (getfullblock)",exc_info=True)
+            logger.error("reddcoind error (getfullblock)", exc_info=True)
             self.shared.stop()
 
         r = loads(respdata)
@@ -626,18 +607,17 @@ class BlockchainProcessor(Processor):
             try:
                 next_block_hash = self.reddcoind('getblockhash', [self.storage.height + 1])
                 next_block = self.getfullblock(next_block_hash)
-            except BaseException, e:
+            except BaseException:
                 revert = True
                 next_block = self.getfullblock(self.storage.last_hash)
 
             self.mtime('daemon')
 
             if (next_block.get('previousblockhash') == self.storage.last_hash) and not revert:
-
                 prev_root_hash = self.storage.get_root_hash()
 
                 self.import_block(next_block, next_block_hash, self.storage.height+1, sync)
-                self.storage.height = self.storage.height + 1
+                self.storage.height += 1
                 self.write_header(self.block2header(next_block), sync)
                 self.storage.last_hash = next_block_hash
                 self.mtime('import')
@@ -650,7 +630,6 @@ class BlockchainProcessor(Processor):
                     self.mtimes['import'] = 0
 
             else:
-
                 # revert current block
                 block = self.getfullblock(self.storage.last_hash)
                 print_log("blockchain reorg", self.storage.height, block.get('previousblockhash'), self.storage.last_hash)
@@ -668,14 +647,12 @@ class BlockchainProcessor(Processor):
                     assert prev_root_hash == self.storage.get_root_hash()
                     prev_root_hash = None
 
-
         self.header = self.block2header(self.reddcoind('getblock', [self.storage.last_hash]))
         self.header['utxo_root'] = self.storage.get_root_hash().encode('hex')
 
         if self.shared.stopped(): 
-            print_log( "closing database" )
+            print_log("closing database")
             self.storage.close()
-
 
     def memorypool_update(self):
         mempool_hashes = set(self.reddcoind('getrawmempool'))
@@ -697,18 +674,17 @@ class BlockchainProcessor(Processor):
         # remove older entries from mempool_hashes
         self.mempool_hashes = mempool_hashes
 
-
         # check all tx outputs
         for tx_hash, tx in new_tx.items():
             mpa = self.mempool_addresses.get(tx_hash, {})
             out_values = []
             for x in tx.get('outputs'):
-                out_values.append( x['value'] )
+                out_values.append(x['value'])
 
                 addr = x.get('address')
                 if not addr:
                     continue
-                v = mpa.get(addr,0)
+                v = mpa.get(addr, 0)
                 v += x['value']
                 mpa[addr] = v
                 touched_addresses.add(addr)
@@ -727,22 +703,21 @@ class BlockchainProcessor(Processor):
 
                 v = self.mempool_values.get(x.get('prevout_hash'))
                 if v:
-                    value = v[ x.get('prevout_n')]
+                    value = v[x.get('prevout_n')]
                 else:
                     txi = (x.get('prevout_hash') + int_to_hex(x.get('prevout_n'), 4)).decode('hex')
                     try:
-                        value = self.storage.get_utxo_value(addr,txi)
+                        value = self.storage.get_utxo_value(addr, txi)
                     except:
                         print_log("utxo not in database; postponing mempool update")
                         return
 
-                v = mpa.get(addr,0)
+                v = mpa.get(addr, 0)
                 v -= value
                 mpa[addr] = v
                 touched_addresses.add(addr)
 
             self.mempool_addresses[tx_hash] = mpa
-
 
         # remove deprecated entries from mempool_addresses
         for tx_hash, addresses in self.mempool_addresses.items():
@@ -768,7 +743,6 @@ class BlockchainProcessor(Processor):
         for addr in touched_addresses:
             self.invalidate_cache(addr)
 
-
     def invalidate_cache(self, address):
         with self.cache_lock:
             if address in self.history_cache:
@@ -780,15 +754,13 @@ class BlockchainProcessor(Processor):
 
         if sessions:
             # TODO: update cache here. if new value equals cached value, do not send notification
-            self.address_queue.put((address,sessions))
+            self.address_queue.put((address, sessions))
 
-    
     def close(self):
         self.blockchain_thread.join()
         print_log("Closing database...")
         self.storage.close()
         print_log("Database is closed")
-
 
     def main_iteration(self):
         if self.shared.stopped():
@@ -806,20 +778,20 @@ class BlockchainProcessor(Processor):
             self.sent_height = self.storage.height
             for session in self.watch_blocks:
                 self.push_response(session, {
-                        'id': None,
-                        'method': 'blockchain.numblocks.subscribe',
-                        'params': [self.storage.height],
-                        })
+                    'id': None,
+                    'method': 'blockchain.numblocks.subscribe',
+                    'params': [self.storage.height],
+                })
 
         if self.sent_header != self.header:
             print_log("blockchain: %d (%.3fs)" % (self.storage.height, t2 - t1))
             self.sent_header = self.header
             for session in self.watch_headers:
                 self.push_response(session, {
-                        'id': None,
-                        'method': 'blockchain.headers.subscribe',
-                        'params': [self.header],
-                        })
+                    'id': None,
+                    'method': 'blockchain.headers.subscribe',
+                    'params': [self.header],
+                })
 
         while True:
             try:
@@ -830,9 +802,7 @@ class BlockchainProcessor(Processor):
             status = self.get_status(addr)
             for session in sessions:
                 self.push_response(session, {
-                        'id': None,
-                        'method': 'blockchain.address.subscribe',
-                        'params': [addr, status],
-                        })
-
-
+                    'id': None,
+                    'method': 'blockchain.address.subscribe',
+                    'params': [addr, status],
+                })

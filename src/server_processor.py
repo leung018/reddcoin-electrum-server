@@ -1,8 +1,8 @@
-import socket
 import sys
-import threading
 import time
-import Queue
+import gevent
+from gevent import Greenlet
+from gevent.queue import Queue, Empty
 
 from .processor import Processor
 from .utils import Hash, print_log, logger
@@ -14,27 +14,23 @@ class ServerProcessor(Processor):
 
     def __init__(self, config, shared):
         Processor.__init__(self)
-        self.daemon = True
         self.config = config
         self.shared = shared
-        self.irc_queue = Queue.Queue()
+        self.irc_queue = Queue()
         self.peers = {}
 
         if self.config.get('server', 'irc') == 'yes':
-            self.irc = IrcThread(self, self.config)
-            self.irc.start(self.irc_queue)
-            t = threading.Thread(target=self.read_irc_results)
-            t.daemon = True
-            t.start()
+            self.irc = IrcThread(self, self.config, self.irc_queue)
+            self.irc.start()
+            Greenlet.spawn(self.read_irc_results)
         else:
             self.irc = None
-
 
     def read_irc_results(self):
         while True:
             try:
                 event, params = self.irc_queue.get(timeout=1)
-            except Queue.Empty:
+            except Empty:
                 continue
             #logger.info(event + ' ' + repr(params))
             if event == 'join':
@@ -45,10 +41,8 @@ class ServerProcessor(Processor):
                 if self.peers.get(nick):
                     self.peers.pop(nick)
 
-
     def get_peers(self):
         return self.peers.values()
-
 
     def process(self, request):
         method = request['method']
@@ -68,6 +62,6 @@ class ServerProcessor(Processor):
             result = VERSION
 
         else:
-            raise BaseException("unknown method: %s"%repr(method))
+            raise BaseException("unknown method: %s" % repr(method))
 
         return result

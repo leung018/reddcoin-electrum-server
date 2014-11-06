@@ -1,9 +1,9 @@
 import json
-import Queue as queue
-import socket
-import threading
 import time
 import sys
+from gevent import Greenlet
+from gevent.queue import Queue
+from gevent.lock import Semaphore
 
 from .utils import random_string, timestr, print_log, logger
 
@@ -11,9 +11,9 @@ from .utils import random_string, timestr, print_log, logger
 class Shared:
 
     def __init__(self, config):
-        self.lock = threading.Lock()
-        self._stopped = False
         self.config = config
+        self.lock = Semaphore()
+        self._stopped = False
         self._paused = True
 
     def paused(self):
@@ -38,13 +38,12 @@ class Shared:
             return self._stopped
 
 
-class Processor(threading.Thread):
+class Processor(Greenlet):
 
     def __init__(self):
-        threading.Thread.__init__(self)
-        self.daemon = True
+        Greenlet.__init__(self)
         self.dispatcher = None
-        self.queue = queue.Queue()
+        self.queue = Queue()
 
     def process(self, request):
         pass
@@ -59,7 +58,7 @@ class Processor(threading.Thread):
     def close(self):
         pass
 
-    def run(self):
+    def _run(self):
         while not self.shared.stopped():
             try:
                 session, request = self.queue.get(True, timeout=1)
@@ -84,8 +83,7 @@ class Dispatcher:
         self.shared = Shared(config)
         self.request_dispatcher = RequestDispatcher(self.shared)
         self.request_dispatcher.start()
-        self.response_dispatcher = \
-            ResponseDispatcher(self.shared, self.request_dispatcher)
+        self.response_dispatcher = ResponseDispatcher(self.shared, self.request_dispatcher)
         self.response_dispatcher.start()
 
     def register(self, prefix, processor):
@@ -95,16 +93,15 @@ class Dispatcher:
         self.request_dispatcher.processors[prefix] = processor
 
 
-class RequestDispatcher(threading.Thread):
+class RequestDispatcher(Greenlet):
 
     def __init__(self, shared):
+        Greenlet.__init__(self)
         self.shared = shared
-        threading.Thread.__init__(self)
-        self.daemon = True
-        self.request_queue = queue.Queue()
-        self.response_queue = queue.Queue()
-        self.lock = threading.Lock()
-        self.idlock = threading.Lock()
+        self.request_queue = Queue()
+        self.response_queue = Queue()
+        self.lock = Semaphore()
+        self.idlock = Semaphore()
         self.sessions = {}
         self.processors = {}
 
@@ -125,11 +122,11 @@ class RequestDispatcher(threading.Thread):
             if x.address == address:
                 return x
 
-    def run(self):
+    def _run(self):
         if self.shared is None:
             raise TypeError("self.shared not set in Processor")
 
-        lastgc = 0 
+        last_gc = 0
 
         while not self.shared.stopped():
             session, request = self.pop_request()
@@ -138,9 +135,9 @@ class RequestDispatcher(threading.Thread):
             except:
                 logger.error('dispatch', exc_info=True)
 
-            if time.time() - lastgc > 60.0:
+            if time.time() - last_gc > 60.0:
                 self.collect_garbage()
-                lastgc = time.time()
+                last_gc = time.time()
 
         self.stop()
 
@@ -202,14 +199,14 @@ class Session:
         self.dispatcher = dispatcher
         self.bp = self.dispatcher.processors['blockchain']
         self._stopped = False
-        self.lock = threading.Lock()
+        self.lock = Semaphore()
         self.subscriptions = []
         self.address = ''
         self.name = ''
         self.version = 'unknown'
         self.protocol_version = 0.
         self.time = time.time()
-        threading.Timer(2, self.info).start()
+        Greenlet.spawn_later(2, self.info)
 
     def key(self):
         return self.name + self.address
@@ -257,13 +254,12 @@ class Session:
             self.subscriptions = []
 
 
-class ResponseDispatcher(threading.Thread):
+class ResponseDispatcher(Greenlet):
 
     def __init__(self, shared, request_dispatcher):
+        Greenlet.__init__(self)
         self.shared = shared
         self.request_dispatcher = request_dispatcher
-        threading.Thread.__init__(self)
-        self.daemon = True
 
     def run(self):
         while not self.shared.stopped():
