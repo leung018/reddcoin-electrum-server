@@ -18,7 +18,7 @@ setup(
     name="reddcoin-electrum-server",
     version=VERSION,
     scripts=['run_electrum_server', 'electrum-server', 'electrum-configure', 'electrum.conf.sample'],
-    install_requires=['plyvel', 'jsonrpclib', 'irc'],
+    install_requires=['plyvel', 'jsonrpclib', 'tinyrpc', 'irc', 'gevent', 'gevent-websocket', 'werkzeug'],
     package_dir={'electrum_server': 'src'},
     py_modules=[
         'electrum_server.__init__',

@@ -16,7 +16,7 @@
 # <http://www.gnu.org/licenses/agpl.html>.
 
 import gevent
-from gevent import socket
+from gevent.pywsgi import WSGIServer
 from gevent import monkey; monkey.patch_all()
 import argparse
 import ConfigParser
@@ -26,7 +26,13 @@ import time
 import json
 import os
 import imp
-
+from requests.exceptions import ConnectionError
+from tinyrpc.protocols.jsonrpc import JSONRPCProtocol
+from tinyrpc.transports.http import HttpPostClientTransport
+from tinyrpc import RPCClient
+from tinyrpc.transports.wsgi import WsgiServerTransport
+from tinyrpc.server.gevent import RPCServerGreenlets
+from tinyrpc.dispatch import RPCDispatcher
 
 if os.path.dirname(os.path.realpath(__file__)) == os.getcwd():
     imp.load_module('electrum_server', *imp.find_module('src'))
@@ -48,7 +54,7 @@ if sys.maxsize <= 2**32:
 if os.getuid() == 0:
     print "Do not run this program as root!"
     print "Run the install script to create a non-privileged user."
-    sys.exit()
+    sys.exit(0)
 
 
 def attempt_read_config(config, filename):
@@ -135,9 +141,13 @@ def create_config(filename=None):
 
 
 def run_rpc_command(params, electrum_rpc_port):
+    rpc_client = RPCClient(
+        JSONRPCProtocol(),
+        HttpPostClientTransport('http://127.0.0.1:%d' % electrum_rpc_port)
+    )
+
+    server = rpc_client.get_proxy()
     cmd = params[0]
-    import xmlrpclib
-    server = xmlrpclib.ServerProxy('http://localhost:%d' % electrum_rpc_port)
     func = getattr(server, cmd)
     r = func(*params[1:])
     if cmd == 'sessions':
@@ -157,6 +167,13 @@ def run_rpc_command(params, electrum_rpc_port):
 def cmd_banner_update():
     load_banner(dispatcher.shared.config)
     return True
+
+
+def cmd_stop():
+    shared.stop()
+    gevent.sleep(3)
+    print_log("Reddcoin Electrum Server stopped")
+    sys.exit(0)
 
 
 def cmd_getinfo():
@@ -233,7 +250,7 @@ if __name__ == '__main__':
     if len(args.command) >= 1:
         try:
             run_rpc_command(args.command, electrum_rpc_port)
-        except socket.error:
+        except ConnectionError:
             print "server not running"
             sys.exit(1)
         sys.exit(0)
@@ -241,7 +258,7 @@ if __name__ == '__main__':
     try:
         run_rpc_command(['getpid'], electrum_rpc_port)
         is_running = True
-    except socket.error:
+    except ConnectionError:
         is_running = False
 
     if is_running:
@@ -270,48 +287,42 @@ if __name__ == '__main__':
     server_proc = ServerProcessor(config, shared)
     dispatcher.register('server', server_proc)
 
-    greenlets = [chain_proc, server_proc]
-    # Create various greenlets we need
+    servers = [chain_proc, server_proc]
+    # Create various servers we need
     if stratum_tcp_port:
         tcp_server = TcpServer(dispatcher, (host, stratum_tcp_port))
-        greenlets.append(tcp_server)
+        servers.append(tcp_server)
 
     if stratum_tcp_ssl_port:
         ssl_server = TcpServer(dispatcher, (host, stratum_tcp_ssl_port), certfile=ssl_certfile, keyfile=ssl_keyfile)
-        greenlets.append(ssl_server)
+        servers.append(ssl_server)
 
     if stratum_http_port:
-        print stratum_http_port
         http_server = HttpServer(dispatcher, host, stratum_http_port, False, None, None)
-        greenlets.append(http_server)
+        servers.append(http_server)
 
     if stratum_http_ssl_port:
         https_server = HttpServer(dispatcher, host, stratum_http_ssl_port, True, ssl_certfile, ssl_keyfile)
-        greenlets.append(https_server)
+        servers.append(https_server)
 
-    # from SimpleXMLRPCServer import SimpleXMLRPCServer
-    # server = SimpleXMLRPCServer(('localhost', electrum_rpc_port), allow_none=True, logRequests=False)
-    # server.register_function(lambda: os.getpid(), 'getpid')
-    # server.register_function(shared.stop, 'stop')
-    # server.register_function(cmd_getinfo, 'getinfo')
-    # server.register_function(cmd_sessions, 'sessions')
-    # server.register_function(cmd_numsessions, 'numsessions')
-    # server.register_function(cmd_peers, 'peers')
-    # server.register_function(cmd_numpeers, 'numpeers')
-    # server.register_function(cmd_debug, 'debug')
-    # server.register_function(cmd_banner_update, 'banner_update')
-    # server.socket.settimeout(1)
-    #
-    # while not shared.stopped():
-    #     try:
-    #         server.handle_request()
-    #     except socket.timeout:
-    #         continue
-    #     except:
-    #         shared.stop()
+    rpcdispatcher = RPCDispatcher()
+    rpcdispatcher.add_method(lambda: os.getpid(), 'getpid')
+    rpcdispatcher.add_method(cmd_stop, 'stop')
+    rpcdispatcher.add_method(cmd_getinfo, 'getinfo')
+    rpcdispatcher.add_method(cmd_sessions, 'sessions')
+    rpcdispatcher.add_method(cmd_numsessions, 'numsessions')
+    rpcdispatcher.add_method(cmd_peers, 'peers')
+    rpcdispatcher.add_method(cmd_numpeers, 'numpeers')
+    rpcdispatcher.add_method(cmd_debug, 'debug')
+    rpcdispatcher.add_method(cmd_banner_update, 'banner_update')
 
-    for greenlet in greenlets:
-        greenlet.start()
+    transport = WsgiServerTransport(queue_class=gevent.queue.Queue)
+    wsgi_server = WSGIServer(('127.0.0.1', electrum_rpc_port), transport.handle)
+    rpc_server = RPCServerGreenlets(transport, JSONRPCProtocol(), rpcdispatcher)
+    greenlets = [gevent.spawn(wsgi_server.serve_forever), gevent.spawn(rpc_server.serve_forever)]
+
+    for s in servers:
+        s.start()
 
     gevent.wait()
     print_log("Reddcoin Electrum Server stopped")
