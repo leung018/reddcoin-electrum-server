@@ -67,11 +67,12 @@ class BlockchainProcessor(Processor):
         # catch_up headers
         self.init_headers(self.storage.height)
 
+        print_log("Blockchain Processor initialised")
         self.blockchain_thread = Greenlet(self.do_catch_up)
         self.blockchain_thread.start()
 
     def do_catch_up(self):
-
+        print_log("Blockchain Processor do_catch_up: started")
         self.header = self.block2header(self.reddcoind('getblock', [self.storage.last_hash]))
         self.header['utxo_root'] = self.storage.get_root_hash().encode('hex')
         self.catch_up(sync=False)
@@ -585,10 +586,8 @@ class BlockchainProcessor(Processor):
         return block
 
     def catch_up(self, sync=True):
-
         prev_root_hash = None
         while not self.shared.stopped():
-
             self.mtime('')
 
             # are we done yet?
@@ -696,7 +695,8 @@ class BlockchainProcessor(Processor):
         for tx_hash, tx in new_tx.items():
             mpa = self.mempool_addresses.get(tx_hash, {})
             for x in tx.get('inputs'):
-                # we assume that the input address can be parsed by deserialize(); this is true for Electrum transactions
+                # we assume that the input address can be parsed by deserialize();
+                # this is true for Electrum transactions
                 addr = x.get('address')
                 if not addr:
                     continue
