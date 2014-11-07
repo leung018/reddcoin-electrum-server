@@ -15,17 +15,13 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
-from itertools import imap
-import threading
 import time
 import hashlib
-import sys
+
 
 __b58chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
 __b58base = len(__b58chars)
 
-global PUBKEY_ADDRESS
-global SCRIPT_ADDRESS
 PUBKEY_ADDRESS = 61
 SCRIPT_ADDRESS = 5
 
@@ -36,7 +32,7 @@ def rev_hex(s):
 
 def int_to_hex(i, length=1):
     s = hex(i)[2:].rstrip('L')
-    s = "0"*(2*length - len(s)) + s
+    s = "0" * (2 * length - len(s)) + s
     return rev_hex(s)
 
 
@@ -91,7 +87,6 @@ def header_from_string(s):
 ############ functions from pywallet #####################
 
 
-
 def hash_160(public_key):
     try:
         md = hashlib.new('ripemd160')
@@ -127,7 +122,7 @@ def hash_160_to_script_address(h160):
     return hash_160_to_address(h160, SCRIPT_ADDRESS)
 
 
-def hash_160_to_address(h160, addrtype = 61):
+def hash_160_to_address(h160, addrtype=61):
     """ Checks if the provided hash is actually 160bits or 20 bytes long and returns the address, else None
     """
     if h160 is None or len(h160) is not 20:
@@ -136,6 +131,7 @@ def hash_160_to_address(h160, addrtype = 61):
     h = Hash(vh160)
     addr = vh160 + h[0:4]
     return b58encode(addr)
+
 
 def bc_address_to_hash_160(addr):
     if addr is None or len(addr) is 0:
@@ -214,24 +210,26 @@ def DecodeBase58Check(psz):
         return key
 
 
-
-
 ########### end pywallet functions #######################
+
 
 def random_string(length):
     with open("/dev/urandom", 'rb') as f:
-        return b58encode( f.read(length) )
+        return b58encode(f.read(length))
+
 
 def timestr():
     return time.strftime("[%d/%m/%Y-%H:%M:%S]")
 
 
+###### logger
 
-### logger
+from itertools import imap
 import logging
 import logging.handlers
 
 logger = logging.getLogger('electrum')
+
 
 def init_logger(logfile):
     hdlr = logging.handlers.WatchedFileHandler(logfile)
@@ -244,8 +242,6 @@ def init_logger(logfile):
 def print_log(*args):
     logger.info(" ".join(imap(str, args)))
 
+
 def print_warning(message):
     logger.warning(message)
-
-
-
