@@ -7,18 +7,13 @@ import sys
 from .processor import print_log, logger
 from .utils import bc_address_to_hash_160, hash_160_to_pubkey_address, hex_to_int, int_to_hex, Hash
 
-global GENESIS_HASH
+
 GENESIS_HASH = 'b868e0d95a3c3c0e0dadc67ee587aaf9dc8acbf99e3b4b3110fad4eb74c1decc'
-
-"""
-Patricia tree for hashing unspents
-
-"""
-
 DEBUG = 0
-KEYLENGTH = 20 + 32 + 4   #56
+KEYLENGTH = 20 + 32 + 4
 
 
+# Patricia tree for hashing unspents
 class Storage(object):
 
     def __init__(self, config, shared, test_reorgs):
@@ -33,15 +28,15 @@ class Storage(object):
 
         self.test_reorgs = test_reorgs
         try:
-            self.db_utxo = plyvel.DB(os.path.join(self.dbpath,'utxo'), create_if_missing=True, compression=None)
-            self.db_addr = plyvel.DB(os.path.join(self.dbpath,'addr'), create_if_missing=True, compression=None)
-            self.db_hist = plyvel.DB(os.path.join(self.dbpath,'hist'), create_if_missing=True, compression=None)
-            self.db_undo = plyvel.DB(os.path.join(self.dbpath,'undo'), create_if_missing=True, compression=None)
+            self.db_utxo = plyvel.DB(os.path.join(self.dbpath, 'utxo'), create_if_missing=True, compression=None)
+            self.db_addr = plyvel.DB(os.path.join(self.dbpath, 'addr'), create_if_missing=True, compression=None)
+            self.db_hist = plyvel.DB(os.path.join(self.dbpath, 'hist'), create_if_missing=True, compression=None)
+            self.db_undo = plyvel.DB(os.path.join(self.dbpath, 'undo'), create_if_missing=True, compression=None)
         except:
             logger.error('db init', exc_info=True)
             self.shared.stop()
 
-        self.db_version = 3 # increase this when database needs to be updated
+        self.db_version = 3  # increase this when database needs to be updated
         try:
             self.last_hash, self.height, db_version = ast.literal_eval(self.db_undo.get('height'))
             print_log("Database version", self.db_version)
@@ -56,14 +51,13 @@ class Storage(object):
 
         # check version
         if self.db_version != db_version:
-            print_log("Your database '%s' is deprecated. Please create a new database"%self.dbpath)
+            print_log("Your database '%s' is deprecated. Please create a new database" % self.dbpath)
             self.shared.stop()
             return
 
-
         # compute root hash
         d = self.get_node('')
-        self.root_hash, v = self.get_node_hash('',d,None)
+        self.root_hash, v = self.get_node_hash('', d, None)
         print_log("UTXO tree root hash:", self.root_hash.encode('hex'))
         print_log("Coins in database:", v)
 
@@ -73,7 +67,6 @@ class Storage(object):
 
     def key_to_address(self, addr):
         return hash_160_to_pubkey_address(addr)
-
 
     def get_proof(self, addr):
         key = self.address_to_key(addr)
@@ -90,7 +83,6 @@ class Storage(object):
 
         return out
 
-
     def get_balance(self, addr):
         key = self.address_to_key(addr)
         i = self.db_utxo.iterator(start=key)
@@ -101,7 +93,6 @@ class Storage(object):
         d = self.get_node(p)
         letter = k[len(p)]
         return d[letter][1]
-
 
     def listunspent(self, addr):
         key = self.address_to_key(addr)
@@ -115,11 +106,10 @@ class Storage(object):
                 txpos = hex_to_int(k[52:56])
                 h = hex_to_int(v[8:12])
                 v = hex_to_int(v[0:8])
-                out.append({'tx_hash': txid, 'tx_pos':txpos, 'height': h, 'value':v})
+                out.append({'tx_hash': txid, 'tx_pos': txpos, 'height': h, 'value': v})
 
-        out.sort(key=lambda x:x['height'])
+        out.sort(key=lambda x: x['height'])
         return out
-
 
     def get_history(self, addr):
         out = []
@@ -141,32 +131,27 @@ class Storage(object):
             out.append((txo, ho))
 
         # sort
-        out.sort(key=lambda x:x[1])
+        out.sort(key=lambda x: x[1])
 
         # uniqueness
         out = set(out)
 
-        return map(lambda x: {'tx_hash':x[0], 'height':x[1]}, out)
-
-
+        return map(lambda x: {'tx_hash': x[0], 'height': x[1]}, out)
 
     def get_address(self, txi):
         return self.db_addr.get(txi)
-
 
     def get_undo_info(self, height):
         s = self.db_undo.get("undo_info_%d" % (height % 100))
         if s is None: print_log("no undo info for ", height)
         return eval(s)
 
-
     def write_undo_info(self, height, reddcoind_height, undo_info):
         if height > reddcoind_height - 100 or self.test_reorgs:
             self.db_undo.put("undo_info_%d" % (height % 100), repr(undo_info))
 
-
     def common_prefix(self, word1, word2):
-        max_len = min(len(word1),len(word2))
+        max_len = min(len(word1), len(word2))
         for i in range(max_len):
             if word2[i] != word1[i]:
                 index = i
@@ -175,13 +160,12 @@ class Storage(object):
             index = max_len
         return word1[0:index]
 
-
     def put_node(self, key, d, batch=None):
         k = 0
         serialized = ''
         for i in range(256):
             if chr(i) in d.keys():
-                k += 1<<i
+                k += 1 << i
                 h, v = d[chr(i)]
                 if h is None: h = chr(0)*32
                 vv = int_to_hex(v, 8).decode('hex')
@@ -189,7 +173,7 @@ class Storage(object):
                 assert len(item) == 40
                 serialized += item
 
-        k = "0x%0.64X" % k # 32 bytes
+        k = "0x%0.64X" % k  # 32 bytes
         k = k[2:].decode('hex')
         assert len(k) == 32
         out = k + serialized
@@ -197,7 +181,6 @@ class Storage(object):
             batch.put(key, out)
         else:
             self.db_utxo.put(key, out) 
-
 
     def get_node(self, key):
 
@@ -216,18 +199,17 @@ class Storage(object):
                 value = hex_to_int(s[32:40])
                 d[chr(i)] = (_hash, value)
                 s = s[40:]
-            k = k/2
+            k /= 2
 
         #cache
         return d
-
 
     def add_address(self, target, value, height):
         assert len(target) == KEYLENGTH
 
         word = target
         key = ''
-        path = [ '' ]
+        path = ['']
         i = self.db_utxo.iterator()
 
         while key != target:
@@ -257,12 +239,12 @@ class Storage(object):
                     if len(new_key) == KEYLENGTH:
                         parent_key = self.get_parent(new_key)
                         parent = self.get_node(parent_key)
-                        z = parent[ new_key[len(parent_key)] ]
-                        self.put_node(prefix, { target[index]:(None,0), new_key[index]:z } )
+                        z = parent[new_key[len(parent_key)]]
+                        self.put_node(prefix, {target[index]: (None, 0), new_key[index]: z})
                     else:
                         # if it is not a leaf, update the hash of new_key because skip_string changed
                         h, v = self.get_node_hash(new_key, self.get_node(new_key), prefix)
-                        self.put_node(prefix, { target[index]:(None,0), new_key[index]:(h,v) } )
+                        self.put_node(prefix, {target[index]: (None, 0), new_key[index]: (h, v)})
 
                     path.append(prefix)
                     self.parents[new_key] = prefix
@@ -270,17 +252,16 @@ class Storage(object):
 
             else:
                 assert key in path
-                items[ word[0] ] = (None,0)
-                self.put_node(key,items)
+                items[word[0]] = (None, 0)
+                self.put_node(key, items)
                 break
 
         # write 
-        s = (int_to_hex(value, 8) + int_to_hex(height,4)).decode('hex')
+        s = (int_to_hex(value, 8) + int_to_hex(height, 4)).decode('hex')
         self.db_utxo.put(target, s)
         # the hash of a node is the txid
         _hash = target[20:52]
         self.update_node_hash(target, path, _hash, value)
-
 
     def update_node_hash(self, node, path, _hash, value):
         c = node
@@ -290,10 +271,9 @@ class Storage(object):
 
         self.hash_list[node] = (_hash, value)
 
-
     def update_hashes(self):
 
-        nodes = {} # nodes to write
+        nodes = {}  # nodes to write
 
         for i in range(KEYLENGTH, -1, -1):
 
@@ -333,7 +313,6 @@ class Storage(object):
                 parent_hash, parent_value = self.get_node_hash(parent, d, grandparent)
                 self.hash_list[parent] = (parent_hash, parent_value)
 
-        
         # batch write modified nodes 
         batch = self.db_utxo.write_batch()
         for k, v in nodes.items():
@@ -343,7 +322,6 @@ class Storage(object):
         # cleanup
         assert self.hash_list == {}
         self.parents = {}
-
 
     def get_node_hash(self, x, d, parent):
 
@@ -356,15 +334,14 @@ class Storage(object):
         d2 = sorted(d.items())
         values = map(lambda x: x[1][1], d2)
         hashes = map(lambda x: x[1][0], d2)
-        value = sum( values )
-        _hash = self.hash( skip_string + ''.join(hashes) )
+        value = sum(values)
+        _hash = self.hash(skip_string + ''.join(hashes))
         return _hash, value
-
 
     def get_path(self, target):
         word = target
         key = ''
-        path = [ '' ]
+        path = ['']
         i = self.db_utxo.iterator(start='')
 
         while key != target:
@@ -389,13 +366,12 @@ class Storage(object):
                         path.append(key)
                 else:
                     print_log('not in tree', self.db_utxo.get(key+word[0]), new_key.encode('hex'))
-                    return False
+                    return []
             else:
                 assert key in path
                 break
 
         return path
-
 
     def delete_address(self, leaf):
         path = self.get_path(leaf)
@@ -429,7 +405,7 @@ class Storage(object):
 
             # note: k is not necessarily a leaf
             if len(k) == KEYLENGTH:
-                 _hash, value = k[20:52], hex_to_int(v[0:8])
+                _hash, value = k[20:52], hex_to_int(v[0:8])
             else:
                 _hash, value = None, None
 
@@ -442,11 +418,10 @@ class Storage(object):
 
         return s
 
-
     def get_children(self, x):
         i = self.db_utxo.iterator()
         l = 0
-        while l <256:
+        while l < 256:
             i.seek(x+chr(l))
             k, v = i.next()
             if k.startswith(x+chr(l)): 
@@ -458,9 +433,6 @@ class Storage(object):
             else: 
                 break
 
-
-
-
     def get_parent(self, x):
         """ return parent and skip string"""
         i = self.db_utxo.iterator()
@@ -468,27 +440,26 @@ class Storage(object):
             p = x[0:-j-1]
             i.seek(p)
             k, v = i.next()
-            if x.startswith(k) and x!=k: 
+            if x.startswith(k) and x != k:
                 break
-        else: raise
+        else:
+            raise
         return k
 
-        
     def hash(self, x):
-        if DEBUG: return "hash("+x+")"
-        return Hash(x)
-
+        if DEBUG:
+            return 'hash(' + x + ')'
+        else:
+            return Hash(x)
 
     def get_root_hash(self):
         return self.root_hash
-
 
     def close(self):
         self.db_utxo.close()
         self.db_addr.close()
         self.db_hist.close()
         self.db_undo.close()
-
 
     def add_to_history(self, addr, tx_hash, tx_pos, value, tx_height):
         key = self.address_to_key(addr)
@@ -500,8 +471,6 @@ class Storage(object):
         # backlink
         self.db_addr.put(txo, addr)
 
-
-
     def revert_add_to_history(self, addr, tx_hash, tx_pos, value, tx_height):
         key = self.address_to_key(addr)
         txo = (tx_hash + int_to_hex(tx_pos, 4)).decode('hex')
@@ -512,14 +481,12 @@ class Storage(object):
         # backlink
         self.db_addr.delete(txo)
 
-
     def get_utxo_value(self, addr, txi):
         key = self.address_to_key(addr)
         leaf = key + txi
         s = self.db_utxo.get(leaf)
         value = hex_to_int(s[0:8])
         return value
-
 
     def set_spent(self, addr, txi, txid, index, height, undo):
         key = self.address_to_key(addr)
@@ -536,12 +503,10 @@ class Storage(object):
         # add to history
         s = self.db_hist.get(addr)
         if s is None: s = ''
-        txo = (txid + int_to_hex(index,4) + int_to_hex(height,4)).decode('hex')
-        s += txi + int_to_hex(in_height,4).decode('hex') + txo
-        s = s[ -80*self.pruning_limit:]
+        txo = (txid + int_to_hex(index, 4) + int_to_hex(height, 4)).decode('hex')
+        s += txi + int_to_hex(in_height, 4).decode('hex') + txo
+        s = s[-80*self.pruning_limit:]
         self.db_hist.put(addr, s)
-
-
 
     def revert_set_spent(self, addr, txi, undo):
         key = self.address_to_key(addr)
@@ -563,15 +528,10 @@ class Storage(object):
         s = s[:-80]
         self.db_hist.put(addr, s)
 
-
-
-
-        
-
     def import_transaction(self, txid, tx, block_height, touched_addr):
+        # contains the list of pruned items for each address in the tx; also, 'prev_addr' is a list of prev addresses
+        undo = {'prev_addr': []}
 
-        undo = { 'prev_addr':[] } # contains the list of pruned items for each address in the tx; also, 'prev_addr' is a list of prev addresses
-                
         prev_addr = []
         for i, x in enumerate(tx.get('inputs')):
             txi = (x.get('prevout_hash') + int_to_hex(x.get('prevout_n'), 4)).decode('hex')
@@ -592,7 +552,6 @@ class Storage(object):
 
         return undo
 
-
     def revert_transaction(self, txid, tx, block_height, touched_addr, undo):
         #print_log("revert tx", txid)
         for x in reversed(tx.get('outputs')):
@@ -610,4 +569,3 @@ class Storage(object):
                 touched_addr.add(addr)
 
         assert undo == {}
-
