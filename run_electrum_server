@@ -298,11 +298,11 @@ if __name__ == '__main__':
         servers.append(ssl_server)
 
     if stratum_http_port:
-        http_server = HttpServer(dispatcher, host, stratum_http_port, False, None, None)
+        http_server = HttpServer(dispatcher, (host, stratum_http_port))
         servers.append(http_server)
 
     if stratum_http_ssl_port:
-        https_server = HttpServer(dispatcher, host, stratum_http_ssl_port, True, ssl_certfile, ssl_keyfile)
+        https_server = HttpServer(dispatcher, (host, stratum_http_ssl_port), certfile=ssl_certfile, keyfile=ssl_keyfile)
         servers.append(https_server)
 
     rpcdispatcher = RPCDispatcher()

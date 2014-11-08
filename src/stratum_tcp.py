@@ -1,6 +1,5 @@
 import json
 import time
-import sys
 
 from gevent import socket
 from gevent.queue import Queue
@@ -62,8 +61,8 @@ class TcpServer(StreamServer):
         self.port = listener[1]
 
     def start(self):
-        print_log(("SSL" if self.ssl_enabled else "TCP") + " server started on port %d" % self.port)
         StreamServer.start(self)
+        print_log(("SSL" if self.ssl_enabled else "TCP") + " server started on port %d" % self.port)
 
     def handle_command(self, raw_command, session):
         try:
@@ -74,7 +73,7 @@ class TcpServer(StreamServer):
 
         if 'id' in command and 'method' in command:
             self.dispatcher.push_request(session, command)
-            ## sleep a bit to prevent a single session from DOSing the queue
+            # sleep a bit to prevent a single session from DOSing the queue
             #gevent.sleep(0.01)
         else:
             session.send_response({"error": "syntax error", "request": raw_command})
