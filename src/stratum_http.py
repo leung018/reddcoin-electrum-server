@@ -92,79 +92,45 @@ class HttpServer(WSGIServer):
             else:
                 session.send_response({"error": "syntax error", "request": command})
 
-    def do_options(self, start_response):
-        start_response('200 OK', [('Allow', 'GET, POST, OPTIONS'),
-                                  ('Access-Control-Allow-Origin', '*'),
-                                  ('Access-Control-Allow-Headers', 'Cache-Control, Content-Language, Content-Type, Expires, Last-Modified, Pragma, Accept-Language, Accept, Origin'),
-                                  ('Content-Length', '0')])
-        return []
-
-    def do_get(self, env, start_response):
-        session_id = None
-        response = []
-        try:
-            if 'HTTP_COOKIE' in env:
-                cookie = SimpleCookie(env['HTTP_COOKIE'])
-                if 'SESSION' in cookie:
-                    session_id = cookie['SESSION'].value
-
-            if session_id is None:
-                session_id = self.create_session()
-
-            session = self.dispatcher.get_session_by_address(session_id)
-            if session:
-                status = '200 OK'
-                while not session.response_queue.empty():
-                    response.append(session.response_queue.get())
-            else:
-                status = '500 Internal Server Error'
-                response.append(json.dumps({"error": "session not found"}))
-        except:
-            status = '500 Internal Server Error'
-
-        start_response(status, [("Set-Cookie", "SESSION=%s" % session_id),
-                                ("Content-type", "application/json-rpc"),
-                                ("Access-Control-Allow-Origin", "*")])
-        return response
-
-    def do_post(self, env, start_response):
-        session_id = None
-        response = []
-        try:
-            if 'HTTP_COOKIE' in env:
-                cookie = SimpleCookie(env['HTTP_COOKIE'])
-                if 'SESSION' in cookie:
-                    session_id = cookie['SESSION'].value
-
-            if session_id is None:
-                session_id = self.create_session()
-
-            session = self.dispatcher.get_session_by_address(session_id)
-            if session:
-                data = env['wsgi.input'].read().strip()
-                self.handle_data(data, session)
-                status = '200 OK'
-                while not session.response_queue.empty():
-                    response.append(session.response_queue.get())
-            else:
-                status = '500 Internal Server Error'
-                response.append(json.dumps({"error": "session not found"}))
-        except:
-            status = '500 Internal Server Error'
-
-        start_response(status, [("Set-Cookie", "SESSION=%s" % session_id),
-                                ("Content-type", "application/json-rpc"),
-                                ("Access-Control-Allow-Origin", "*")])
-        return response
-
     def _application(self, env, start_response):
         method = env['REQUEST_METHOD']
         if method == 'OPTIONS':
-            return self.do_options(start_response)
-        elif method == 'GET':
-            return self.do_get(env, start_response)
-        elif method == 'POST':
-            return self.do_post(env, start_response)
+            start_response('200 OK', [('Allow', 'GET, POST, OPTIONS'),
+                                      ('Access-Control-Allow-Origin', '*'),
+                                      ('Access-Control-Allow-Headers', 'Cache-Control, Content-Language, Content-Type, Expires, Last-Modified, Pragma, Accept-Language, Accept, Origin'),
+                                      ('Content-Length', '0')])
+            return []
+        elif method == 'GET' or method == 'POST':
+            session_id = None
+            response = []
+            try:
+                if 'HTTP_COOKIE' in env:
+                    cookie = SimpleCookie(env['HTTP_COOKIE'])
+                    if 'SESSION' in cookie:
+                        session_id = cookie['SESSION'].value
+
+                if session_id is None:
+                    session_id = self.create_session()
+
+                session = self.dispatcher.get_session_by_address(session_id)
+                if session:
+                    if method == 'POST':
+                        data = env['wsgi.input'].read().strip()
+                        self.handle_data(data, session)
+
+                    status = '200 OK'
+                    while not session.response_queue.empty():
+                        response.append(session.response_queue.get())
+                else:
+                    status = '500 Internal Server Error'
+                    response.append(json.dumps({"error": "session not found"}))
+            except:
+                status = '500 Internal Server Error'
+
+            start_response(status, [("Set-Cookie", "SESSION=%s" % session_id),
+                                    ("Content-type", "application/json-rpc"),
+                                    ("Access-Control-Allow-Origin", "*")])
+            return response
         else:
             start_response('501 Not Implemented', [])
             return []
