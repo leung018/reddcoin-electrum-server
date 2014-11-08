@@ -15,7 +15,7 @@ class TcpSession(Session):
         Session.__init__(self, dispatcher)
         self.connection = connection
         self.address = address[0] + ":%d" % address[1]
-        self.name = "TCP " if not ssl_enabled else "SSL "
+        self.name = "TCP" if not ssl_enabled else "SSL"
         self.timeout = 1000
         self.response_queue = Queue()
         self.dispatcher.add_session(self)

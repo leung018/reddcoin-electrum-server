@@ -39,7 +39,7 @@ class HttpSession(Session):
     def __init__(self, dispatcher, session_id, ssl_enabled):
         Session.__init__(self, dispatcher)
         self.address = session_id
-        self.name = "HTTP " if not ssl_enabled else "HTTPS "
+        self.name = "HTTP" if not ssl_enabled else "HTTPS"
         self.timeout = 60
         self.response_queue = Queue()
         self.dispatcher.add_session(self)
