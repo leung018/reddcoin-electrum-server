@@ -36,7 +36,7 @@ from .utils import random_string, print_log
 
 class HttpSession(Session):
 
-    def __init__(self, dispatcher, session_id, ssl_enabled):
+    def __init__(self, dispatcher, ssl_enabled, session_id):
         Session.__init__(self, dispatcher)
         self.address = session_id
         self.name = "HTTP" if not ssl_enabled else "HTTPS"
@@ -68,7 +68,7 @@ class HttpServer(WSGIServer):
 
     def create_session(self):
         session_id = random_string(20)
-        HttpSession(self.dispatcher, session_id, self.ssl_enabled)
+        HttpSession(self.dispatcher, self.ssl_enabled, session_id)
         return session_id
 
     def handle_data(self, data, session):
@@ -119,6 +119,7 @@ class HttpServer(WSGIServer):
                         self.handle_data(data, session)
 
                     status = '200 OK'
+                    response.append(session.response_queue.get())
                     while not session.response_queue.empty():
                         response.append(session.response_queue.get())
                 else:

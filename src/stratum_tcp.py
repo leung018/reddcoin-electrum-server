@@ -11,7 +11,7 @@ from .utils import print_log, logger
 
 class TcpSession(Session):
 
-    def __init__(self, connection, address, dispatcher, ssl_enabled):
+    def __init__(self, dispatcher, ssl_enabled, connection, address):
         Session.__init__(self, dispatcher)
         self.connection = connection
         self.address = address[0] + ":%d" % address[1]
@@ -80,7 +80,7 @@ class TcpServer(StreamServer):
 
     def handle(self, connection, address):
         try:
-            session = TcpSession(connection, address, self.dispatcher, self.ssl_enabled)
+            session = TcpSession(self.dispatcher, self.ssl_enabled, connection, address)
         except BaseException as e:
             logger.error("cannot start TCP session " + str(e) + ' ' + repr(address))
             connection.close()
