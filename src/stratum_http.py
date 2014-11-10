@@ -119,7 +119,7 @@ class HttpServer(WSGIServer):
                         self.handle_data(data, session)
 
                     status = '200 OK'
-                    response.append(session.response_queue.get())
+                    gevent.sleep(0.01)
                     while not session.response_queue.empty():
                         response.append(session.response_queue.get())
                 else:
