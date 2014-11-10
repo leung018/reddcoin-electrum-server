@@ -1,6 +1,7 @@
 import json
 import time
 import gevent
+from gevent import Greenlet
 from gevent.queue import Queue
 from geventwebsocket import WebSocketServer, WebSocketApplication, Resource
 
@@ -10,9 +11,10 @@ from .utils import print_log
 
 class WSSession(Session):
 
-    def __init__(self, dispatcher, ssl_enabled, address):
+    def __init__(self, dispatcher, ssl_enabled, client):
         Session.__init__(self, dispatcher)
-        self.address = address[0] + ":%d" % address[1]
+        self.ws = client.ws
+        self.address = client.address[0] + ":%d" % client.address[1]
         self.name = "WS" if not ssl_enabled else "WSS"
         self.timeout = 60
         self.response_queue = Queue()
@@ -29,24 +31,16 @@ class WSSession(Session):
 
 class WSApplication(WebSocketApplication):
     def on_open(self, *args, **kwargs):
-        self.create_session()
+        session = self.create_session()
+        Greenlet.spawn(self.handle_response, session)
 
     def on_message(self, data, *args, **kwargs):
         if data is None:
             return
 
-        response = []
         session = self.find_session()
         if session:
             self.handle_data(data, session)
-            response.append(session.response_queue.get())
-            while not session.response_queue.empty():
-                response.append(session.response_queue.get())
-        else:
-            response.append(json.dumps({"error": "session not found"}))
-
-        reply = "\n".join(response)
-        self.ws.send(reply, **kwargs)
 
     def on_close(self, *args, **kwargs):
         session = self.find_session()
@@ -55,12 +49,23 @@ class WSApplication(WebSocketApplication):
 
     def create_session(self):
         client = self.ws.handler.active_client
-        return WSSession(self.server.dispatcher, self.server.ssl_enabled, client.address)
+        return WSSession(self.server.dispatcher, self.server.ssl_enabled, client)
 
     def find_session(self):
         client = self.ws.handler.active_client
         address = client.address[0] + ":%d" % client.address[1]
         return self.server.dispatcher.get_session_by_address(address)
+
+    def handle_response(self, session):
+        try:
+            shared = session.dispatcher.shared
+            while not (shared.stopped() or shared.paused() or session.stopped()):
+                reply = session.response_queue.get()
+                session.ws.send(reply)
+        except BaseException as e:
+            logger.error("error in handling WS session " + str(e) + ' ' + session.address)
+        finally:
+            session.stop()
 
     def handle_data(self, data, session):
         try:
