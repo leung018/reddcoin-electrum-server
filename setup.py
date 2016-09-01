@@ -13,7 +13,7 @@ def read_file(filename):
         f.close()
 
 
-VERSION = '0.9.3'
+VERSION = '1.0'
 setup(
     name="reddcoin-electrum-server",
     version=VERSION,

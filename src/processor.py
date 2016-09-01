@@ -5,8 +5,8 @@ import threading
 import time
 import sys
 
-from .utils import random_string, timestr, print_log, logger
-
+from utils import random_string, timestr, print_log
+from utils import logger
 
 class Shared:
 
@@ -107,6 +107,7 @@ class RequestDispatcher(threading.Thread):
         self.idlock = threading.Lock()
         self.sessions = {}
         self.processors = {}
+        self.lastgc = 0 
 
     def push_response(self, session, item):
         self.response_queue.put((session, item))
@@ -129,18 +130,13 @@ class RequestDispatcher(threading.Thread):
         if self.shared is None:
             raise TypeError("self.shared not set in Processor")
 
-        lastgc = 0 
-
         while not self.shared.stopped():
             session, request = self.pop_request()
             try:
                 self.do_dispatch(session, request)
             except:
-                logger.error('dispatch', exc_info=True)
-
-            if time.time() - lastgc > 60.0:
-                self.collect_garbage()
-                lastgc = time.time()
+                logger.error('dispatch',exc_info=True)
+            self.collect_garbage()
 
         self.stop()
 
@@ -156,7 +152,8 @@ class RequestDispatcher(threading.Thread):
 
         if session is not None:
             if suffix == 'subscribe':
-                session.subscribe_to_service(method, params)
+                if not session.subscribe_to_service(method, params):
+                    return
 
         prefix = request['method'].split('.')[0]
         try:
@@ -190,9 +187,13 @@ class RequestDispatcher(threading.Thread):
             self.sessions.pop(key)
 
     def collect_garbage(self):
+        # only for HTTP sessions.
         now = time.time()
+        if time.time() - self.lastgc < 60.0:
+            return
+        self.lastgc = now
         for session in self.sessions.values():
-            if (now - session.time) > session.timeout:
+            if session.name == "HTTP" and (now - session.time) > session.timeout:
                 session.stop()
 
 
@@ -209,6 +210,7 @@ class Session:
         self.version = 'unknown'
         self.protocol_version = 0.
         self.time = time.time()
+        self.max_subscriptions = dispatcher.shared.config.getint('server', 'max_subscriptions')
         threading.Timer(2, self.info).start()
 
     def key(self):
@@ -241,12 +243,20 @@ class Session:
 
     def subscribe_to_service(self, method, params):
         if self.stopped():
-            return
+            return False
+
+        if len(self.subscriptions) > self.max_subscriptions:
+            print_log("max subscriptions reached", self.address)
+            self.stop()
+            return False
+
         # append to self.subscriptions only if this does not raise
         self.bp.do_subscribe(method, params, self)
         with self.lock:
             if (method, params) not in self.subscriptions:
                 self.subscriptions.append((method, params))
+        return True
+
 
     def stop_subscriptions(self):
         with self.lock:
