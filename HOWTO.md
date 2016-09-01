@@ -130,7 +130,7 @@ set txindex=1 you need to reindex the blockchain by running
 
     $ reddcoind -reindex
 
-If you have a fresh copy of reddcoind start `reddcoind`:
+If you already have a freshly indexed copy of the blockchain with txindex start `reddcoind`:
 
     $ reddcoind
 

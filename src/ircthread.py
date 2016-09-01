@@ -110,10 +110,12 @@ class IrcThread(threading.Thread):
             time.sleep(1)
 
         self.ircname = self.host + ' ' + self.getname()
+        # avoid UnicodeDecodeError using LenientDecodingLineBuffer
+        irc.client.ServerConnection.buffer_class = irc.buffer.LenientDecodingLineBuffer
         logger.info("joining IRC")
 
         while not self.processor.shared.stopped():
-            client = irc.client.IRC()
+            client = irc.client.Reactor()
             try:
                 c = client.server().connect('irc.freenode.net', 6667, self.nick, self.password, ircname=self.ircname)
             except irc.client.ServerConnectionError:

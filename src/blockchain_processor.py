@@ -101,25 +101,30 @@ class BlockchainProcessor(Processor):
             s += k+':'+"%.2f"%v+' '
         print_log(s)
 
+    def wait_on_reddcoind(self):
+        self.shared.pause()
+        time.sleep(10)
+        if self.shared.stopped():
+            # this will end the thread
+            raise
 
     def reddcoind(self, method, params=[]):
         postdata = dumps({"method": method, 'params': params, 'id': 'jsonrpc'})
         while True:
             try:
                 respdata = urllib.urlopen(self.reddcoind_url, postdata).read()
-                break
             except:
                 print_log("cannot reach reddcoind...")
-                self.shared.pause()
-                time.sleep(10)
-                if self.shared.stopped():
-                    # this will end the thread
-                    raise
-                continue
-
-        r = loads(respdata)
-        if r['error'] is not None:
-            raise BaseException(r['error'])
+                self.wait_on_reddcoind()
+            else:
+                r = loads(respdata)
+                if r['error'] is not None:
+                    if r['error'].get('code') == -28:
+                        print_log("reddcoind still warming up...")
+                        self.wait_on_bitcoind()
+                        continue
+                    raise BaseException(r['error'])
+                break
         return r.get('result')
 
 
