@@ -3,10 +3,10 @@ detailed information on how to configure your server.
 
 
 TLDR:
-# sudo ./electrum-configure
-# sudo python ./setup.py install
-# electrum-server start
-# electrum-server stop
+$ sudo ./electrum-configure
+$ sudo python ./setup.py install
+$ electrum-server start
+$ electrum-server stop
 
 
 Note: If you want to run the server without installing it on your
@@ -30,7 +30,7 @@ Electrum database.
 ---------------------------
 You need to run the script as root:
 
-# sudo ./electrum-configure
+$ sudo ./electrum-configure
 
 It will:
  * create the configuration file in /etc/electrum.conf
@@ -50,7 +50,7 @@ your server, and to be visible on IRC.
 3. Install the python package
 -----------------------------
 
-# sudo python setup.py install
+$ sudo python setup.py install
 
 Note: You will need to redo this every time you pull code from git.
 
@@ -60,7 +60,7 @@ Note: You will need to redo this every time you pull code from git.
 
 Use 'electrum-server' to start and stop the server:
 
-# electrum-server <start|stop|status|getinfo>
+$ electrum-server <start|stop|status|getinfo>
 
 The server will write a log file in its database path.
 

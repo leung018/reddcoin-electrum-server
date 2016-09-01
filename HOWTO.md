@@ -32,7 +32,7 @@ Lines that lack hash or dollar signs are pastes from config files. They
 should be copied verbatim or adapted without the indentation tab.
 
 `apt-get install` commands are suggestions for required dependencies.
-They conform to an Ubuntu 13.10 system but may well work with Debian
+They conform to an Ubuntu 15.10 system but may well work with Debian
 or other versions of Ubuntu.
 
 Prerequisites
@@ -55,11 +55,15 @@ Python libraries. Python 2.7 is the minimum supported version.
 **Hardware.** The lightest setup is a pruning server with diskspace
 requirements of about 1 GB for the electrum database. However note that
 you also need to run reddcoind and keep a copy of the full blockchain,
-which is roughly 1.8 GB at September 2016. If you have less than 2 GB of RAM
-make sure you limit reddcoind to 8 concurrent connections. If you have more
-resources to spare you can run the server with a higher limit of historic 
-transactions per address. CPU speed is important for the initial block 
-chain import, but is also important if you plan to run a public Electrum server, 
+which is roughly 1.8 GB (September 2016). Ideally you have a machine with 16 GB of RAM
+and an equal amount of swap. If you have ~2 GB of RAM make sure you limit bitcoind 
+to 8 concurrent connections by disabling incoming connections. electrum-server may
+bail-out on you from time to time with less than 4 GB of RAM, so you might have to 
+monitor the process and restart it. You can tweak cache sizes in the config to an extend
+but most RAM will be used to process blocks and catch-up on initial start.
+
+CPU speed is less important than fast I/O speed. electrum-server makes uses of one core 
+only leaving spare cycles for reddcoind. Fast single core CPU power helps for the initial 
 which could serve tens of concurrent requests. Any multi-core x86 CPU from 2009 or
 newer other than an Atom should do for good performance. An ideal setup
 has enough RAM to hold and process the leveldb database in tmpfs (e.g. `/dev/shm`).
@@ -89,8 +93,6 @@ to your `.bashrc`, `.profile`, or `.bash_profile`, then logout and relogin:
 
 ### Step 2. Download reddcoind
 
-Older versions of Electrum used to require a patched version of reddcoind.
-This is not the case anymore since reddcoind supports the 'txindex' option.
 We currently recommend reddcoind 2.0.0 stable.
 
 If your package manager does not supply a recent reddcoind or you prefer to compile it yourself,
@@ -152,7 +154,7 @@ We will download the latest git snapshot for Electrum to configure and install i
     $ cd ~/src
     $ git clone https://github.com/reddcoin-project/reddcoin-electrum-server.git
     $ cd reddcoin-electrum-server
-    $ sudo electrum-configure
+    $ sudo ./electrum-configure
     $ sudo python setup.py install
 
 See the INSTALL file for more information about the configure and install commands.
@@ -165,6 +167,10 @@ package manager if you don't want to use the install routine.
 
     $ sudo apt-get install python-setuptools python-openssl python-leveldb libleveldb-dev
     $ sudo easy_install jsonrpclib irc plyvel
+
+For the python irc module please note electrum-server currently only supports versions between 11 and 14.0. 
+The setup.py takes care of installing a supported version but be aware of it when installing or upgrading
+manually.
 
 Regarding leveldb, see the steps in README.leveldb for further details, especially if your system
 doesn't have the python-leveldb package or if plyvel installation fails.
@@ -194,8 +200,8 @@ The section in the electrum server configuration file (see step 10) looks like t
 
 ### Step 7. Import blockchain into the database or download it
 
-It's recommended to fetch a pre-processed leveldb from the net. 
-The "electrum-configure" script above will offer you to download a database with pruning limit 100.
+It's recommended that you fetch a pre-processed leveldb from the net.
+The "configure" script above will offer you to download a database with pruning limit 100.
 
 You can fetch a recent copy of electrum leveldb database with pruning limits of 100 at:
 http://reddwallet.org/electrum.tar.gz
@@ -218,9 +224,9 @@ It's not recommended to do initial indexing of the database on an SSD because th
 does at least 2 TB (!) of disk writes and puts considerable wear-and-tear on an SSD. It's a lot better
 to use tmpfs and just swap out to disk when necessary.
 
-Databases have grown to roughly 8 GB in April 2014, give or take a gigabyte, between pruning limits
-100 and 10000. Leveldb prunes the database from time to time, so it's not uncommon to see databases
-~50% larger at times when it's writing a lot, especially when indexing from the beginning.
+Databases have grown to roughly 30 GB as of February 2016. Leveldb prunes the database from time to time,
+so it's not uncommon to see databases ~50% larger at times when it's writing a lot, especially when
+indexing from the beginning.
 
 
 ### Step 8. Create a self-signed SSL cert
@@ -305,7 +311,9 @@ Or if you use sudo and the user is added to sudoers group:
 
 Two more things for you to consider:
 
-1. To increase security you may want to close reddcoind for incoming connections and connect outbound only
+1. To increase privacy of transactions going through your server
+   you may want to close reddcoind for incoming connections and connect outbound only. Most servers do run
+   full nodes with open incoming connections though.
 
 2. Consider restarting reddcoind (together with electrum-server) on a weekly basis to clear out unconfirmed
    transactions from the local the memory pool which did not propagate over the network.
@@ -322,6 +330,12 @@ unprivileged user.
 You should see this in the log file:
 
     starting Electrum server
+
+If your blockchain database is out of date Reddcoin Electrum Server will start updating it. You will see something similar to this in the log file:
+
+    [09/02/2016-09:58:18] block 397319 (1727 197.37s) 0290aae5dc6395e2c60e8b2c9e48a7ee246cad7d0630d17dd5b54d70a41ffed7 (10.13tx/s, 139.78s/block) (eta 11.5 hours, 240 blocks)
+    
+The important pieces to you are at the end. In this example, the server has to calculate 240 more blocks, with an ETA of 11.5 hours. Multiple entries will appear below this one as the server catches back up to the latest block. During this time the server will not accept incoming connections from clients or connect to the IRC channel.
 
 If you want to stop Electrum server, use the 'stop' command:
 
@@ -346,7 +360,7 @@ or hostname and the port. Press 'Ok' and the client will disconnect from the
 current server and connect to your new Electrum server. You should see your
 addresses and transactions history. You can see the number of blocks and
 response time in the Server selection window. You should send/receive some
-Reddcoins to confirm that everything is working properly.
+reddcoins to confirm that everything is working properly.
 
 ### Step 13. Join us on IRC, subscribe to the server thread
 

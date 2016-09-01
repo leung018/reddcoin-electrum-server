@@ -1,4 +1,28 @@
-﻿import hashlib
+﻿#!/usr/bin/env python
+# Copyright(C) 2011-2016 Thomas Voegtlin
+# Copyright(C) 2014-2016 Reddcoin Developers
+#
+# Permission is hereby granted, free of charge, to any person
+# obtaining a copy of this software and associated documentation files
+# (the "Software"), to deal in the Software without restriction,
+# including without limitation the rights to use, copy, modify, merge,
+# publish, distribute, sublicense, and/or sell copies of the Software,
+# and to permit persons to whom the Software is furnished to do so,
+# subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+# BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+# ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+import hashlib
 from json import dumps, load
 import os
 from Queue import Queue
@@ -11,7 +35,8 @@ import urllib
 import deserialize
 from processor import Processor, print_log
 from storage import Storage
-from utils import logger, hash_decode, hash_encode, Hash, header_from_string, header_to_string, ProfiledThread, rev_hex, int_to_hex
+from utils import logger, hash_decode, hash_encode, Hash, header_from_string, header_to_string, ProfiledThread, \
+    rev_hex, int_to_hex4
 
 class BlockchainProcessor(Processor):
 
@@ -39,9 +64,11 @@ class BlockchainProcessor(Processor):
         self.headers_data = ''
         self.headers_path = config.get('leveldb', 'path')
 
+        self.mempool_fees = {}
         self.mempool_values = {}
         self.mempool_addresses = {}
         self.mempool_hist = {} # addr -> (txid, delta)
+        self.mempool_unconfirmed = {} # txid -> set of unconfirmed inputs
         self.mempool_hashes = set()
         self.mempool_lock = threading.Lock()
 
@@ -232,8 +259,8 @@ class BlockchainProcessor(Processor):
 
         with self.cache_lock:
             chunk_index = header.get('block_height')/2016
-            if self.chunk_cache.get(chunk_index):
-                self.chunk_cache.pop(chunk_index)
+            if chunk_index in self.chunk_cache:
+                del self.chunk_cache[chunk_index]
 
     def pop_header(self):
         # we need to do this only if we have not flushed
@@ -264,7 +291,6 @@ class BlockchainProcessor(Processor):
             raw_tx = self.reddcoind('getrawtransaction', (txid, 0))
         except:
             return None
-
         vds = deserialize.BCDataStream()
         vds.write(raw_tx.decode('hex'))
         try:
@@ -273,6 +299,14 @@ class BlockchainProcessor(Processor):
             print_log("ERROR: cannot parse", txid)
             return None
 
+    def get_unconfirmed_history(self, addr):
+        hist = []
+        with self.mempool_lock:
+            for tx_hash, delta in self.mempool_hist.get(addr, ()):
+                height = -1 if self.mempool_unconfirmed.get(tx_hash) else 0
+                fee = self.mempool_fees.get(tx_hash)
+                hist.append({'tx_hash':tx_hash, 'height':height, 'fee':fee})
+        return hist
 
     def get_history(self, addr, cache_only=False):
         with self.cache_lock:
@@ -281,26 +315,13 @@ class BlockchainProcessor(Processor):
             return hist
         if cache_only:
             return -1
-
         hist = self.storage.get_history(addr)
-
-        # add memory pool
-        with self.mempool_lock:
-            for txid, delta in self.mempool_hist.get(addr, ()):
-                hist.append({'tx_hash':txid, 'height':0})
-
+        hist.extend(self.get_unconfirmed_history(addr))
         with self.cache_lock:
             if len(self.history_cache) > self.max_cache_size:
                 logger.info("clearing cache")
                 self.history_cache.clear()
             self.history_cache[addr] = hist
-        return hist
-
-    def get_unconfirmed_history(self, addr):
-        hist = []
-        with self.mempool_lock:
-            for txid, delta in self.mempool_hist.get(addr, ()):
-                hist.append({'tx_hash':txid, 'height':0})
         return hist
 
     def get_unconfirmed_value(self, addr):
@@ -309,7 +330,6 @@ class BlockchainProcessor(Processor):
             for txid, delta in self.mempool_hist.get(addr, ()):
                 v += delta
         return v
-
 
     def get_status(self, addr, cache_only=False):
         tx_points = self.get_history(addr, cache_only)
@@ -481,7 +501,7 @@ class BlockchainProcessor(Processor):
                     print_log("error rc!!")
                     self.shared.stop()
                 if l == []:
-                    self.watched_addresses.pop(addr)
+                    del self.watched_addresses[addr]
 
 
     def process(self, request, cache_only=False):
@@ -527,7 +547,7 @@ class BlockchainProcessor(Processor):
         elif method == 'blockchain.utxo.get_address':
             txid = str(params[0])
             pos = int(params[1])
-            txi = (txid + int_to_hex(pos, 4)).decode('hex')
+            txi = (txid + int_to_hex4(pos)).decode('hex')
             result = self.storage.get_address(txi)
 
         elif method == 'blockchain.block.get_header':
@@ -714,49 +734,62 @@ class BlockchainProcessor(Processor):
         for tx_hash, tx in new_tx.iteritems():
             mpa = self.mempool_addresses.get(tx_hash, {})
             out_values = []
+            out_sum = 0
             for x in tx.get('outputs'):
                 addr = x.get('address', '')
-                out_values.append((addr, x['value']))
+                value = x['value']
+                out_values.append((addr, value))
                 if not addr:
                     continue
                 v = mpa.get(addr, 0)
-                v += x['value']
+                v += value
                 mpa[addr] = v
                 touched_addresses.add(addr)
+                out_sum += value
 
+            self.mempool_fees[tx_hash] = -out_sum
             self.mempool_addresses[tx_hash] = mpa
             self.mempool_values[tx_hash] = out_values
+            self.mempool_unconfirmed[tx_hash] = set()
 
         # check all inputs
         for tx_hash, tx in new_tx.iteritems():
             mpa = self.mempool_addresses.get(tx_hash, {})
+            # are we spending unconfirmed inputs?
+            input_sum = 0
             for x in tx.get('inputs'):
-                mpv = self.mempool_values.get(x.get('prevout_hash'))
+                prev_hash = x.get('prevout_hash')
+                prev_n = x.get('prevout_n')
+                mpv = self.mempool_values.get(prev_hash)
                 if mpv:
-                    addr, value = mpv[ x.get('prevout_n')]
+                    addr, value = mpv[prev_n]
+                    self.mempool_unconfirmed[tx_hash].add(prev_hash)
                 else:
-                    txi = (x.get('prevout_hash') + int_to_hex(x.get('prevout_n'), 4)).decode('hex')
+                    txi = (prev_hash + int_to_hex4(prev_n)).decode('hex')
                     try:
                         addr = self.storage.get_address(txi)
                         value = self.storage.get_utxo_value(addr,txi)
                     except:
                         print_log("utxo not in database; postponing mempool update")
                         return
-
+                # we can proceed
+                input_sum += value
                 if not addr:
                     continue
-                v = mpa.get(addr,0)
+                v = mpa.get(addr, 0)
                 v -= value
                 mpa[addr] = v
                 touched_addresses.add(addr)
-
             self.mempool_addresses[tx_hash] = mpa
+            self.mempool_fees[tx_hash] += input_sum
 
         # remove deprecated entries from mempool_addresses
         for tx_hash, addresses in self.mempool_addresses.items():
             if tx_hash not in self.mempool_hashes:
-                self.mempool_addresses.pop(tx_hash)
-                self.mempool_values.pop(tx_hash)
+                del self.mempool_addresses[tx_hash]
+                del self.mempool_values[tx_hash]
+                del self.mempool_unconfirmed[tx_hash]
+                del self.mempool_fees[tx_hash]
                 touched_addresses.update(addresses)
 
         # remove deprecated entries from mempool_hist
@@ -794,7 +827,7 @@ class BlockchainProcessor(Processor):
         with self.cache_lock:
             if address in self.history_cache:
                 # print_log("cache: invalidating", address)
-                self.history_cache.pop(address)
+                del self.history_cache[address]
 
         with self.watch_lock:
             sessions = self.watched_addresses.get(address)
