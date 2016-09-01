@@ -29,7 +29,6 @@ import imp
 
 if os.path.dirname(os.path.realpath(__file__)) == os.getcwd():
     imp.load_module('electrum_server', *imp.find_module('src'))
-  
 
 from electrum_server import storage, networks, utils
 from electrum_server.processor import Dispatcher, print_log
@@ -49,7 +48,6 @@ if os.getuid() == 0:
     print "Run the install script to create a non-privileged user."
     sys.exit()
 
-
 def attempt_read_config(config, filename):
     try:
         with open(filename, 'r') as f:
@@ -57,14 +55,12 @@ def attempt_read_config(config, filename):
     except IOError:
         pass
 
-
 def load_banner(config):
     try:
         with open(config.get('server', 'banner_file'), 'r') as f:
             config.set('server', 'banner', f.read())
     except IOError:
         pass
-
 
 def setup_network_params(config):
     type = config.get('network', 'type')
@@ -79,7 +75,6 @@ def setup_network_params(config):
         utils.SCRIPT_ADDRESS = config.getint('network', 'script_address')
     if config.has_option('network', 'genesis_hash'):
         storage.GENESIS_HASH = config.get('network', 'genesis_hash')
-
 
 def create_config(filename=None):
     config = ConfigParser.ConfigParser()
@@ -110,6 +105,10 @@ def create_config(filename=None):
     config.add_section('leveldb')
     config.set('leveldb', 'path', '/dev/shm/electrum_db')
     config.set('leveldb', 'pruning_limit', '100')
+    config.set('leveldb', 'utxo_cache', str(1024*1024*1024))
+    config.set('leveldb', 'hist_cache', str(2048*1024*1024))
+    config.set('leveldb', 'addr_cache', str(256*1024*1024))
+    config.set('leveldb', 'profiler', 'no')
 
     # set network parameters
     config.add_section('network')
@@ -157,7 +156,6 @@ def cmd_banner_update():
     load_banner(dispatcher.shared.config)
     return True
 
-
 def cmd_getinfo():
     return {
         'blocks': chain_proc.storage.height,
@@ -167,7 +165,6 @@ def cmd_getinfo():
         'cached': len(chain_proc.history_cache),
     }
 
-
 def cmd_sessions():
     return map(lambda s: {"time": s.time,
                           "name": s.name,
@@ -176,21 +173,19 @@ def cmd_sessions():
                           "subscriptions": len(s.subscriptions)},
                dispatcher.request_dispatcher.get_sessions())
 
-
 def cmd_numsessions():
     return len(dispatcher.request_dispatcher.get_sessions())
-
 
 def cmd_peers():
     return server_proc.peers.keys()
 
-
 def cmd_numpeers():
     return len(server_proc.peers)
 
-
 def cmd_debug(s):
     import traceback
+    from guppy import hpy; 
+    hp = hpy()
     if s:
         try:
             result = str(eval(s))
@@ -206,17 +201,19 @@ def get_port(config, name):
     except:
         return None
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--conf', metavar='path', default=None, help='specify a configuration file')
-    parser.add_argument('command', nargs='*', default=[], help='send a command to the server')
-    args = parser.parse_args()
 
-    config = create_config(args.conf)
+# global
+shared = None
+chain_proc = None
+server_proc = None
+dispatcher = None
+
+def start_server(config):
+    global shared, chain_proc, server_proc, dispatcher
+
     logfile = config.get('server', 'logfile')
     utils.init_logger(logfile)
     host = config.get('server', 'host')
-    electrum_rpc_port = get_port(config, 'electrum_rpc_port')
     stratum_tcp_port = get_port(config, 'stratum_tcp_port')
     stratum_http_port = get_port(config, 'stratum_http_port')
     stratum_tcp_ssl_port = get_port(config, 'stratum_tcp_ssl_port')
@@ -229,24 +226,6 @@ if __name__ == '__main__':
     if ssl_certfile is '' or ssl_keyfile is '':
         stratum_tcp_ssl_port = None
         stratum_http_ssl_port = None
-
-    if len(args.command) >= 1:
-        try:
-            run_rpc_command(args.command, electrum_rpc_port)
-        except socket.error:
-            print "server not running"
-            sys.exit(1)
-        sys.exit(0)
-
-    try:
-        run_rpc_command(['getpid'], electrum_rpc_port)
-        is_running = True
-    except socket.error:
-        is_running = False
-
-    if is_running:
-        print "server already running"
-        sys.exit(1)
 
     print_log("Starting Reddcoin Electrum server on", host)
 
@@ -291,6 +270,43 @@ if __name__ == '__main__':
     for server in transports:
         server.start()
 
+
+def stop_server():
+    shared.stop()
+    server_proc.join()
+    chain_proc.join()
+    print_log("Reddcoin Electrum Server stopped")
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--conf', metavar='path', default=None, help='specify a configuration file')
+    parser.add_argument('command', nargs='*', default=[], help='send a command to the server')
+    args = parser.parse_args()
+    config = create_config(args.conf)
+
+    electrum_rpc_port = get_port(config, 'electrum_rpc_port')
+
+    if len(args.command) >= 1:
+        try:
+            run_rpc_command(args.command, electrum_rpc_port)
+        except socket.error:
+            print "server not running"
+            sys.exit(1)
+        sys.exit(0)
+
+    try:
+        run_rpc_command(['getpid'], electrum_rpc_port)
+        is_running = True
+    except socket.error:
+        is_running = False
+
+    if is_running:
+        print "server already running"
+        sys.exit(1)
+
+    start_server(config)
+
     from SimpleXMLRPCServer import SimpleXMLRPCServer
     server = SimpleXMLRPCServer(('localhost', electrum_rpc_port), allow_none=True, logRequests=False)
     server.register_function(lambda: os.getpid(), 'getpid')
@@ -310,8 +326,4 @@ if __name__ == '__main__':
         except socket.timeout:
             continue
         except:
-            shared.stop()
-
-    server_proc.join()
-    chain_proc.join()
-    print_log("Reddcoin Electrum Server stopped")
+            stop_server()

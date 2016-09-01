@@ -13,6 +13,7 @@ import deserialize
 from processor import Processor, print_log
 from utils import *
 from storage import Storage
+import utils
 from utils import logger
 
 class BlockchainProcessor(Processor):
@@ -20,7 +21,10 @@ class BlockchainProcessor(Processor):
     def __init__(self, config, shared):
         Processor.__init__(self)
 
-        self.mtimes = {}
+        # monitoring
+        self.avg_time = 0,0,0
+        self.time_ref = time.time()
+
         self.shared = shared
         self.config = config
         self.up_to_date = False
@@ -52,8 +56,6 @@ class BlockchainProcessor(Processor):
             self.test_reorgs = False
         self.storage = Storage(config, shared, self.test_reorgs)
 
-        self.dblock = threading.Lock()
-
         self.reddcoind_url = 'http://%s:%s@%s:%s/' % (
             config.get('reddcoind', 'reddcoind_user'),
             config.get('reddcoind', 'reddcoind_password'),
@@ -65,19 +67,24 @@ class BlockchainProcessor(Processor):
 
         # catch_up headers
         self.init_headers(self.storage.height)
-
-        self.blockchain_thread = threading.Thread(target = self.do_catch_up)
+        # start catch_up thread
+        if config.getboolean('leveldb', 'profiler'):
+            filename = os.path.join(config.get('leveldb', 'path'), 'profile')
+            print_log('profiled thread', filename)
+            self.blockchain_thread = utils.ProfiledThread(filename, target = self.do_catch_up)
+        else:
+            self.blockchain_thread = threading.Thread(target = self.do_catch_up)
         self.blockchain_thread.start()
 
 
     def do_catch_up(self):
-
         self.header = self.block2header(self.reddcoind('getblock', [self.storage.last_hash]))
         self.header['utxo_root'] = self.storage.get_root_hash().encode('hex')
         self.catch_up(sync=False)
-        print_log("Blockchain is up to date.")
-        self.memorypool_update()
-        print_log("Memory pool initialized.")
+        if not self.shared.stopped():
+            print_log("Blockchain is up to date.")
+            self.memorypool_update()
+            print_log("Memory pool initialized.")
 
         while not self.shared.stopped():
             self.main_iteration()
@@ -87,27 +94,40 @@ class BlockchainProcessor(Processor):
             time.sleep(10)
 
 
+    def set_time(self):
+        self.time_ref = time.time()
 
-    def mtime(self, name):
-        now = time.time()
-        if name != '':
-            delta = now - self.now
-            t = self.mtimes.get(name, 0)
-            self.mtimes[name] = t + delta
-        self.now = now
-
-    def print_mtime(self):
-        s = ''
-        for k, v in self.mtimes.items():
-            s += k+':'+"%.2f"%v+' '
-        print_log(s)
+    def print_time(self, num_tx):
+        delta = time.time() - self.time_ref
+        # leaky averages
+        seconds_per_block, tx_per_second, n = self.avg_time
+        alpha = (1. + 0.01 * n)/(n+1)
+        seconds_per_block = (1-alpha) * seconds_per_block + alpha * delta
+        alpha2 = alpha * delta / seconds_per_block
+        tx_per_second = (1-alpha2) * tx_per_second + alpha2 * num_tx / delta
+        self.avg_time = seconds_per_block, tx_per_second, n+1
+        if self.storage.height%100 == 0 \
+            or (self.storage.height%10 == 0 and self.storage.height >= 100000)\
+            or self.storage.height >= 200000:
+            msg = "block %d (%d %.2fs) %s" %(self.storage.height, num_tx, delta, self.storage.get_root_hash().encode('hex'))
+            msg += " (%.2ftx/s, %.2fs/block)" % (tx_per_second, seconds_per_block)
+            run_blocks = self.storage.height - self.start_catchup_height
+            remaining_blocks = self.reddcoind_height - self.storage.height
+            if run_blocks>0 and remaining_blocks>0:
+                remaining_minutes = remaining_blocks * seconds_per_block / 60
+                new_blocks = int(remaining_minutes / 10) # number of new blocks expected during catchup
+                blocks_to_process = remaining_blocks + new_blocks
+                minutes = blocks_to_process * seconds_per_block / 60
+                rt = "%.0fmin"%minutes if minutes < 300 else "%.1f hours"%(minutes/60)
+                msg += " (eta %s, %d blocks)" % (rt, remaining_blocks)
+            print_log(msg)
 
     def wait_on_reddcoind(self):
         self.shared.pause()
         time.sleep(10)
         if self.shared.stopped():
             # this will end the thread
-            raise
+            raise BaseException()
 
     def reddcoind(self, method, params=[]):
         postdata = dumps({"method": method, 'params': params, 'id': 'jsonrpc'})
@@ -265,8 +285,7 @@ class BlockchainProcessor(Processor):
         if cache_only:
             return -1
 
-        with self.dblock:
-            hist = self.storage.get_history(addr)
+        hist = self.storage.get_history(addr)
 
         # add memory pool
         with self.mempool_lock:
@@ -411,6 +430,10 @@ class BlockchainProcessor(Processor):
             self.invalidate_cache(addr)
 
         self.storage.update_hashes()
+        # batch write modified nodes 
+        self.storage.batch_write()
+        # return length for monitoring
+        return len(tx_hashes)
 
 
     def add_request(self, session, request):
@@ -572,7 +595,6 @@ class BlockchainProcessor(Processor):
                 "id": i,
             })
             i += 1
-
         postdata = dumps(rawtxreq)
 
         while True:
@@ -600,14 +622,11 @@ class BlockchainProcessor(Processor):
 
     def catch_up(self, sync=True):
 
-        t0 = time.time()
-        start_catchup_time = t0
-        start_catchup_height = self.storage.height
+        self.start_catchup_height = self.storage.height
         prev_root_hash = None
+        n = 0
+
         while not self.shared.stopped():
-
-            self.mtime('')
-
             # are we done yet?
             info = self.reddcoind('getinfo')
             self.reddcoind_height = info.get('blocks')
@@ -616,8 +635,9 @@ class BlockchainProcessor(Processor):
                 self.up_to_date = True
                 break
 
-            # fixme: this is unsafe, if we revert when the undo info is not yet written
-            revert = (random.randint(1, 100) == 1) if self.test_reorgs else False
+            self.set_time()
+
+            revert = (random.randint(1, 100) == 1) if self.test_reorgs and self.storage.height>100 else False
 
             # not done..
             self.up_to_date = False
@@ -628,44 +648,21 @@ class BlockchainProcessor(Processor):
 
             next_block = self.getfullblock(next_block_hash if not revert else self.storage.last_hash)
 
-            self.mtime('daemon')
-
             if (next_block.get('previousblockhash') == self.storage.last_hash) and not revert:
 
                 prev_root_hash = self.storage.get_root_hash()
 
-                self.import_block(next_block, next_block_hash, self.storage.height+1, sync)
+                n = self.import_block(next_block, next_block_hash, self.storage.height+1, sync)
                 self.storage.height = self.storage.height + 1
                 self.write_header(self.block2header(next_block), sync)
                 self.storage.last_hash = next_block_hash
-
-                self.mtime('import')
-
-                t1 = time.time()
-                if t1-t0>1 or (self.storage.height % 1000 == 0):
-                    t_daemon = self.mtimes.get('daemon')
-                    t_import = self.mtimes.get('import')
-   
-                    eta = ''
-                    run_blocks = self.storage.height - start_catchup_height
-                    remaining_blocks = self.reddcoind_height - self.storage.height
-                    if run_blocks>0 and remaining_blocks>0:
-                        seconds_per_block = (t1-start_catchup_time) / run_blocks 
-                        remaining_minutes = remaining_blocks * seconds_per_block / 60
-                        new_blocks = remaining_minutes / 10 # number of new blocks expected during catchup
-                        blocks_to_process = remaining_blocks + new_blocks
-                        remaining_minutes = blocks_to_process * seconds_per_block / 60
-                        eta = "(eta %.0fmin at %.1fs/block and %.0f blocks remaining)" % (remaining_minutes, seconds_per_block, blocks_to_process)
-
-                    print_log("block %d (%.3fs %.3fs)" % (self.storage.height, t_daemon, t_import), self.storage.get_root_hash().encode('hex'), eta)
-                    t0 = t1
 
             else:
 
                 # revert current block
                 block = self.getfullblock(self.storage.last_hash)
                 print_log("blockchain reorg", self.storage.height, block.get('previousblockhash'), self.storage.last_hash)
-                self.import_block(block, self.storage.last_hash, self.storage.height, sync, revert=True)
+                n = self.import_block(block, self.storage.last_hash, self.storage.height, sync, revert=True)
                 self.pop_header()
                 self.flush_headers()
 
@@ -679,6 +676,8 @@ class BlockchainProcessor(Processor):
                     assert prev_root_hash == self.storage.get_root_hash()
                     prev_root_hash = None
 
+            # print time
+            self.print_time(n)
 
         self.header = self.block2header(self.reddcoind('getblock', [self.storage.last_hash]))
         self.header['utxo_root'] = self.storage.get_root_hash().encode('hex')
@@ -815,10 +814,7 @@ class BlockchainProcessor(Processor):
             print_log("Stopping timer")
             return
 
-        with self.dblock:
-            t1 = time.time()
-            self.catch_up()
-            t2 = time.time()
+        self.catch_up()
 
         self.memorypool_update()
 
@@ -832,7 +828,6 @@ class BlockchainProcessor(Processor):
                         })
 
         if self.sent_header != self.header:
-            print_log("blockchain: %d (%.3fs)" % (self.storage.height, t2 - t1))
             self.sent_header = self.header
             for session in self.watch_headers:
                 self.push_response(session, {
