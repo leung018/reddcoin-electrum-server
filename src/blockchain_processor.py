@@ -258,7 +258,8 @@ class BlockchainProcessor(Processor):
             chunk = self.chunk_cache.get(i)
             if not chunk:
                 chunk = self.read_chunk(i)
-                self.chunk_cache[i] = chunk
+                if chunk:
+                    self.chunk_cache[i] = chunk
 
         return chunk
 
@@ -558,8 +559,20 @@ class BlockchainProcessor(Processor):
                 print_log("sent tx:", txo)
                 result = txo
             except BaseException, e:
-                result = str(e)  # do not send an error
-                print_log("error:", result, params)
+		error = e.args[0]
+                if error["code"] == -26:
+                    # If we return anything that's not the transaction hash,
+                    #  it's considered an error message
+                    message = error["message"]
+                    if "non-mandatory-script-verify-flag" in message:
+                        result = "Your client produced a transaction that is not accepted by the Reddcoin network any more. Please upgrade to Electrum 2.5.1 or newer\n"
+                    else:
+                        result = "The transaction was rejected by network rules."
+                        result += "(" + message + ")\n"
+                        result += "[" + params[0] + "]"
+                else:
+                    result = error["message"]  # do send an error
+                print_log("error:", result)
 
         elif method == 'blockchain.transaction.get_merkle':
             tx_hash = params[0]

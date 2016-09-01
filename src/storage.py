@@ -251,7 +251,7 @@ class Storage(object):
         p = self.get_parent(k)
         d = self.get_node(p)
         letter = k[len(p)]
-        return d[letter][1]
+        return d.get(letter)[1]
 
     def listunspent(self, addr):
         key = self.address_to_key(addr)
@@ -268,6 +268,9 @@ class Storage(object):
                     h = hex_to_int(v[8:12])
                     v = hex_to_int(v[0:8])
                     out.append({'tx_hash': txid, 'tx_pos':txpos, 'height': h, 'value':v})
+                if len(out) == 1000:
+                    print_log('max utxo reached', addr)
+                    break
 
         out.sort(key=lambda x:x['height'])
         return out

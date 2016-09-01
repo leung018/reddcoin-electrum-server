@@ -34,6 +34,12 @@ path = /var/electrum-server
 # for each address, history will be pruned if it is longer than this limit
 pruning_limit = 100
 
+# cache sizes in bytes, the default is optimized for ~4 GB RAM setups to run bitcoind alongside
+# If you have lots of RAM increase up to 16 times for best performance 
+#hist_cache = 67108864
+#utxo_cache = 134217728
+#addr_cache = 16777216
+
 [reddcoind]
 reddcoind_host = 127.0.0.1
 reddcoind_port = 45443
