@@ -86,11 +86,11 @@ fi
 
 # download database
 if [ ! -d $path ]; then
-    mkdir -p $path
     echo "Database not found in $path."
     read -p "Do you want to download it from the Electrum foundry to $path ? " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
+	mkdir -p $path
 	wget -O - "http://reddwallet.org/electrum.tar.gz" | tar --extract --gunzip --strip-components 1 --directory $path --file -
     fi
 fi
@@ -107,16 +107,16 @@ if ! [ -f $logfile ]; then
 fi
 
 
-reddcoind_user=$(read_config "user")
+reddcoind_user=$(read_config "reddcoind_user")
 if ! [ "$reddcoind_user" ]; then
     read -p "rpcuser (from your reddcoin.conf file): " -r
-    write_config "user" $REPLY
+    write_config "reddcoind_user" $REPLY
 fi
 
-reddcoind_password=$(read_config "password")
+reddcoind_password=$(read_config "reddcoind_password")
 if ! [ "$reddcoind_password" ]; then
     read -p "rpcpassword (from your reddcoin.conf file): " -r
-    write_config "password" $REPLY
+    write_config "reddcoind_password" $REPLY
 fi
 
 

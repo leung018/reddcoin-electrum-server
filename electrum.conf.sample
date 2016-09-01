@@ -5,8 +5,6 @@ username = reddcoin
 host = YOUR_DOMAIN.COM
 # ports
 electrum_rpc_port = 8000
-password = YOUR_LOCAL_RPC_PASSWORD
-
 stratum_tcp_port = 50001
 stratum_tcp_ssl_port = 50002
 stratum_http_port = 8081
@@ -22,8 +20,8 @@ banner = Welcome to Electrum!
 banner_file = /etc/electrum.banner
 
 # use your host name above with . replaced by _
-irc_nick = YOUR_DOMAIN_COM
-irc = yes
+#irc_nick = YOUR_DOMAIN_COM
+#irc = no
 
 ssl_certfile = /home/reddcoin/electrum-server.crt
 ssl_keyfile = /home/reddcoin/electrum-server.key
@@ -37,8 +35,8 @@ path = /var/electrum-server
 pruning_limit = 100
 
 [reddcoind]
-host = 127.0.0.1
-port = 8332
+reddcoind_host = 127.0.0.1
+reddcoind_port = 45443
 # user and password from reddcoin.conf
-user =
-password =
+reddcoind_user =
+reddcoind_password =

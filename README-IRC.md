@@ -1,7 +1,7 @@
 IRC is used by Reddcoin Electrum server to find 'peers' - other Reddcoin Electrum servers. The
 current list can be seen by running:
 
-    ./server.py peers
+    electrum-server peers
 
 The following config file options are used by the IRC part of Reddcoin Electrum server:
 

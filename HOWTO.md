@@ -25,7 +25,7 @@ reddcoin user has sudo rights, so we use '$ sudo command' when we need to.
 
 Strings that are surrounded by "lower than" and "greater than" ( < and > )
 should be replaced by the user with something appropriate. For example,
-<password> should be replaced by a user chosen password. Do not confuse this
+\<password\> should be replaced by a user chosen password. Do not confuse this
 notation with shell redirection ('command < file' or 'command > file')!
 
 Lines that lack hash or dollar signs are pastes from config files. They
@@ -52,10 +52,10 @@ installed: `python`, `easy_install`, `git`, standard C/C++
 build chain. You will need root access in order to install other software or
 Python libraries. 
 
-**Hardware.** The lightest setup is a pruning server with disk space
+**Hardware.** The lightest setup is a pruning server with diskspace
 requirements of about 1 GB for the electrum database. However note that
 you also need to run reddcoind and keep a copy of the full blockchain,
-which is roughly 0.7 GB at September 2014. If you have less than 2 GB of RAM
+which is roughly 1.8 GB at September 2016. If you have less than 2 GB of RAM
 make sure you limit reddcoind to 8 concurrent connections. If you have more
 resources to spare you can run the server with a higher limit of historic 
 transactions per address. CPU speed is important for the initial block 
@@ -91,7 +91,7 @@ to your `.bashrc`, `.profile`, or `.bash_profile`, then logout and relogin:
 
 Older versions of Electrum used to require a patched version of reddcoind.
 This is not the case anymore since reddcoind supports the 'txindex' option.
-We currently recommend reddcoind 0.9.2 stable.
+We currently recommend reddcoind 2.0.0 stable.
 
 If your package manager does not supply a recent reddcoind or you prefer to compile it yourself,
 here are some pointers for Ubuntu:
@@ -100,8 +100,9 @@ here are some pointers for Ubuntu:
     $ sudo su - reddcoin
     $ cd ~/src
     $ git clone https://github.com/reddcoin-project/reddcoin.git
-    $ cd reddcoin/src
-    $ make -f makefile.unix
+    $ cd reddcoin
+    $ ./configure --disable-wallet --without-miniupnpc
+    $ make
     $ strip ~/src/reddcoin/src/reddcoind
     $ cp -a ~/src/reddcoin/src/reddcoind ~/bin/reddcoind
 
@@ -119,7 +120,7 @@ Write this in `reddcoin.conf`:
     rpcuser=<rpc-username>
     rpcpassword=<rpc-password>
     rpcallowip=127.0.0.1
-    rpcport=8332
+    rpcport=45443
     daemon=1
     txindex=1
     staking=0
@@ -182,7 +183,7 @@ deprecated.
 
 The pruning server uses leveldb and keeps a smaller and
 faster database by pruning spent transactions. It's a lot quicker to get up
-and running and requires less maintenance and disk space than abe.
+and running and requires less maintenance and diskspace than abe.
 
 The section in the electrum server configuration file (see step 10) looks like this:
 
@@ -201,7 +202,7 @@ http://reddwallet.org/electrum.tar.gz
 
 Alternatively, if you have the time and nerve, you can import the blockchain yourself.
 
-As of September 2014 it takes about 6 hours to import the whole blockchain, depending
+As of April 2016 it takes between two days and over a week to import 1.4MM blocks, depending
 on CPU speed, I/O speed, and your selected pruning limit.
 
 It's considerably faster and strongly recommended to index in memory. You can use /dev/shm or
@@ -216,6 +217,10 @@ used parts. It's fine to use a file on an SSD for swap in this case.
 It's not recommended to do initial indexing of the database on an SSD because the indexing process
 does at least 2 TB (!) of disk writes and puts considerable wear-and-tear on an SSD. It's a lot better
 to use tmpfs and just swap out to disk when necessary.
+
+Databases have grown to roughly 8 GB in April 2014, give or take a gigabyte between pruning limits 
+100 and 10000. Leveldb prunes the database from time to time, so it's not uncommon to see databases
+~50% larger at times when it's writing a lot, especially when indexing from the beginning.
 
 
 ### Step 8. Create a self-signed SSL cert
@@ -319,7 +324,7 @@ safely whenever your machine is rebooted.
 
 We will assume you have a working Electrum client, a wallet, and some
 transactions history. You should start the client and click on the green
-check mark (last button on the right of the status bar) to open the Server
+checkmark (last button on the right of the status bar) to open the Server
 selection window. If your server is public, you should see it in the list
 and you can select it. If you server is private, you need to enter its IP
 or hostname and the port. Press 'Ok' and the client will disconnect from the

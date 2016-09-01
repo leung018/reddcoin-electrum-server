@@ -10,10 +10,10 @@ import threading
 import urllib
 
 import deserialize
-from .processor import Processor, print_log
-from .utils import *
-from .storage import Storage
-
+from processor import Processor, print_log
+from utils import *
+from storage import Storage
+from utils import logger
 
 class BlockchainProcessor(Processor):
 
@@ -54,10 +54,10 @@ class BlockchainProcessor(Processor):
         self.dblock = threading.Lock()
 
         self.reddcoind_url = 'http://%s:%s@%s:%s/' % (
-            config.get('reddcoind', 'user'),
-            config.get('reddcoind', 'password'),
-            config.get('reddcoind', 'host'),
-            config.get('reddcoind', 'port'))
+            config.get('reddcoind', 'reddcoind_user'),
+            config.get('reddcoind', 'reddcoind_password'),
+            config.get('reddcoind', 'reddcoind_host'),
+            config.get('reddcoind', 'reddcoind_port'))
 
         self.sent_height = 0
         self.sent_header = None
@@ -258,26 +258,12 @@ class BlockchainProcessor(Processor):
             return -1
 
         with self.dblock:
-            try:
-                hist = self.storage.get_history(addr)
-                is_known = True
-            except:
-                logger.error("error get_history",exc_info=True)
-                raise
-            if hist:
-                is_known = True
-            else:
-                hist = []
-                is_known = False
+            hist = self.storage.get_history(addr)
 
         # add memory pool
         with self.mempool_lock:
             for txid, delta in self.mempool_hist.get(addr, []):
                 hist.append({'tx_hash':txid, 'height':0})
-
-        # add something to distinguish between unused and empty addresses
-        if hist == [] and is_known:
-            hist = ['*']
 
         with self.cache_lock:
             if len(self.history_cache) > self.max_cache_size:
@@ -562,6 +548,10 @@ class BlockchainProcessor(Processor):
         elif method == 'blockchain.transaction.get':
             tx_hash = params[0]
             result = self.reddcoind('getrawtransaction', [tx_hash, 0])
+
+        elif method == 'blockchain.estimatefee':
+            num = int(params[0])
+            result = self.reddcoind('estimatefee', [num])
 
         else:
             raise BaseException("unknown method:%s" % method)
