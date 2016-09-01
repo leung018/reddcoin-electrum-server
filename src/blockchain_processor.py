@@ -1,4 +1,4 @@
-import ast
+﻿import ast
 import hashlib
 from json import dumps, loads
 import os
@@ -20,7 +20,7 @@ class BlockchainProcessor(Processor):
     def __init__(self, config, shared):
         Processor.__init__(self)
 
-        self.mtimes = {} # monitoring
+        self.mtimes = {}
         self.shared = shared
         self.config = config
         self.up_to_date = False
@@ -31,6 +31,7 @@ class BlockchainProcessor(Processor):
         self.watched_addresses = {}
 
         self.history_cache = {}
+        self.merkle_cache = {}
         self.max_cache_size = 100000
         self.chunk_cache = {}
         self.cache_lock = threading.Lock()
@@ -112,7 +113,9 @@ class BlockchainProcessor(Processor):
         postdata = dumps({"method": method, 'params': params, 'id': 'jsonrpc'})
         while True:
             try:
-                respdata = urllib.urlopen(self.reddcoind_url, postdata).read()
+                connection = urllib.urlopen(self.reddcoind_url, postdata)
+                respdata = connection.read()
+                connection.close()
             except:
                 print_log("cannot reach reddcoind...")
                 self.wait_on_reddcoind()
@@ -121,7 +124,7 @@ class BlockchainProcessor(Processor):
                 if r['error'] is not None:
                     if r['error'].get('code') == -28:
                         print_log("reddcoind still warming up...")
-                        self.wait_on_bitcoind()
+                        self.wait_on_reddcoind()
                         continue
                     raise BaseException(r['error'])
                 break
@@ -306,7 +309,13 @@ class BlockchainProcessor(Processor):
             status += tx.get('tx_hash') + ':%d:' % tx.get('height')
         return hashlib.sha256(status).digest().encode('hex')
 
-    def get_merkle(self, tx_hash, height):
+    def get_merkle(self, tx_hash, height, cache_only):
+        with self.cache_lock:
+            out = self.merkle_cache.get(tx_hash)
+        if out is not None:
+            return out
+        if cache_only:
+            return -1
 
         block_hash = self.reddcoind('getblockhash', [height])
         b = self.reddcoind('getblock', [block_hash])
@@ -332,32 +341,13 @@ class BlockchainProcessor(Processor):
                 merkle = merkle[2:]
             merkle = n
 
-        return {"block_height": height, "merkle": s, "pos": tx_pos}
-
-
-    def add_to_history(self, addr, tx_hash, tx_pos, tx_height):
-        # keep it sorted
-        s = self.serialize_item(tx_hash, tx_pos, tx_height) + 40*chr(0)
-        assert len(s) == 80
-
-        serialized_hist = self.batch_list[addr]
-
-        l = len(serialized_hist)/80
-        for i in range(l-1, -1, -1):
-            item = serialized_hist[80*i:80*(i+1)]
-            item_height = int(rev_hex(item[36:39].encode('hex')), 16)
-            if item_height <= tx_height:
-                serialized_hist = serialized_hist[0:80*(i+1)] + s + serialized_hist[80*(i+1):]
-                break
-        else:
-            serialized_hist = s + serialized_hist
-
-        self.batch_list[addr] = serialized_hist
-
-        # backlink
-        txo = (tx_hash + int_to_hex(tx_pos, 4)).decode('hex')
-        self.batch_txio[txo] = addr
-
+        out = {"block_height": height, "merkle": s, "pos": tx_pos}
+        with self.cache_lock:
+            if len(self.merkle_cache) > self.max_cache_size:
+                logger.info("clearing merkle cache")
+                self.merkle_cache.clear()
+            self.merkle_cache[tx_hash] = out
+        return out
 
 
 
@@ -415,7 +405,7 @@ class BlockchainProcessor(Processor):
             self.storage.write_undo_info(block_height, self.reddcoind_height, undo_info)
 
         # add the max
-        self.storage.db_undo.put('height', repr( (block_hash, block_height, self.storage.db_version) ))
+        self.storage.save_height(block_hash, block_height)
 
         for addr in touched_addr:
             self.invalidate_cache(addr)
@@ -549,12 +539,9 @@ class BlockchainProcessor(Processor):
                 print_log("error:", result, params)
 
         elif method == 'blockchain.transaction.get_merkle':
-            if cache_only:
-                result = -1
-            else:
-                tx_hash = params[0]
-                tx_height = params[1]
-                result = self.get_merkle(tx_hash, tx_height)
+            tx_hash = params[0]
+            tx_height = params[1]
+            result = self.get_merkle(tx_hash, tx_height, cache_only)
 
         elif method == 'blockchain.transaction.get':
             tx_hash = params[0]
@@ -590,7 +577,9 @@ class BlockchainProcessor(Processor):
 
         while True:
             try:
-                respdata = urllib.urlopen(self.reddcoind_url, postdata).read()
+                connection = urllib.urlopen(self.reddcoind_url, postdata)
+                respdata = connection.read()
+                connection.close()
             except:
                 logger.error("reddcoind error (getfullblock)")
                 self.wait_on_reddcoind()
@@ -603,7 +592,7 @@ class BlockchainProcessor(Processor):
                     rawtxdata.append(ir['result'])
             except BaseException as e:
                 logger.error(str(e))
-                self.wait_on_bitcoind()
+                self.wait_on_reddcoind()
                 continue
 
             block['tx'] = rawtxdata
@@ -611,6 +600,9 @@ class BlockchainProcessor(Processor):
 
     def catch_up(self, sync=True):
 
+        t0 = time.time()
+        start_catchup_time = t0
+        start_catchup_height = self.storage.height
         prev_root_hash = None
         while not self.shared.stopped():
 
@@ -646,14 +638,27 @@ class BlockchainProcessor(Processor):
                 self.storage.height = self.storage.height + 1
                 self.write_header(self.block2header(next_block), sync)
                 self.storage.last_hash = next_block_hash
+
                 self.mtime('import')
-            
-                if self.storage.height % 1000 == 0 and not sync:
+
+                t1 = time.time()
+                if t1-t0>1 or (self.storage.height % 1000 == 0):
                     t_daemon = self.mtimes.get('daemon')
                     t_import = self.mtimes.get('import')
-                    print_log("catch_up: block %d (%.3fs %.3fs)" % (self.storage.height, t_daemon, t_import), self.storage.get_root_hash().encode('hex'))
-                    self.mtimes['daemon'] = 0
-                    self.mtimes['import'] = 0
+   
+                    eta = ''
+                    run_blocks = self.storage.height - start_catchup_height
+                    remaining_blocks = self.reddcoind_height - self.storage.height
+                    if run_blocks>0 and remaining_blocks>0:
+                        seconds_per_block = (t1-start_catchup_time) / run_blocks 
+                        remaining_minutes = remaining_blocks * seconds_per_block / 60
+                        new_blocks = remaining_minutes / 10 # number of new blocks expected during catchup
+                        blocks_to_process = remaining_blocks + new_blocks
+                        remaining_minutes = blocks_to_process * seconds_per_block / 60
+                        eta = "(eta %.0fmin at %.1fs/block and %.0f blocks remaining)" % (remaining_minutes, seconds_per_block, blocks_to_process)
+
+                    print_log("block %d (%.3fs %.3fs)" % (self.storage.height, t_daemon, t_import), self.storage.get_root_hash().encode('hex'), eta)
+                    t0 = t1
 
             else:
 
@@ -699,7 +704,6 @@ class BlockchainProcessor(Processor):
                 continue
 
             new_tx[tx_hash] = tx
-            self.mempool_hashes.add(tx_hash)
 
         # remove older entries from mempool_hashes
         self.mempool_hashes = mempool_hashes

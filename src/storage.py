@@ -142,11 +142,12 @@ class Storage(object):
             out.append((txi, hi))
             out.append((txo, ho))
 
-        # sort
-        out.sort(key=lambda x:x[1])
-
         # uniqueness
         out = set(out)
+        # sort
+        out = list(out)
+
+        out.sort(key=lambda x:x[1])
 
         return map(lambda x: {'tx_hash':x[0], 'height':x[1]}, out)
 
@@ -202,13 +203,10 @@ class Storage(object):
 
 
     def get_node(self, key):
-
+        """ return deserialized content of a trie node """
         s = self.db_utxo.get(key)
-        if s is None: 
-            return 
-
-        #print "get node", key.encode('hex'), len(key), s.encode('hex')
-
+        if s is None:
+            return
         k = int(s[0:32].encode('hex'), 16)
         s = s[32:]
         d = {}
@@ -219,12 +217,10 @@ class Storage(object):
                 d[chr(i)] = (_hash, value)
                 s = s[40:]
             k = k/2
-
-        #cache
         return d
 
 
-    def add_address(self, target, value, height):
+    def add_key(self, target, value, height):
         assert len(target) == KEYLENGTH
 
         word = target
@@ -269,7 +265,6 @@ class Storage(object):
                     path.append(prefix)
                     self.parents[new_key] = prefix
                     break
-
             else:
                 assert key in path
                 items[ word[0] ] = (None,0)
@@ -312,7 +307,7 @@ class Storage(object):
 
                 parent = self.parents[node]
 
-                # read parent.. do this in add_address
+                # read parent.. do this in add_key
                 d = nodes.get(parent)
                 if d is None:
                     d = self.get_node(parent)
@@ -399,7 +394,7 @@ class Storage(object):
         return path
 
 
-    def delete_address(self, leaf):
+    def delete_key(self, leaf):
         path = self.get_path(leaf)
         if path is False:
             print_log("addr not in tree", leaf.encode('hex'), self.key_to_address(leaf[0:20]), self.db_utxo.get(leaf))
@@ -445,23 +440,6 @@ class Storage(object):
         return s
 
 
-    def get_children(self, x):
-        i = self.db_utxo.iterator()
-        l = 0
-        while l <256:
-            i.seek(x+chr(l))
-            k, v = i.next()
-            if k.startswith(x+chr(l)): 
-                yield k, v
-                l += 1
-            elif k.startswith(x): 
-                yield k, v
-                l = ord(k[len(x)]) + 1
-            else: 
-                break
-
-
-
 
     def get_parent(self, x):
         """ return parent and skip string"""
@@ -491,13 +469,16 @@ class Storage(object):
         self.db_hist.close()
         self.db_undo.close()
 
+    def save_height(self, block_hash, block_height):
+        self.db_undo.put('height', repr( (block_hash, block_height, self.db_version) ))
+
 
     def add_to_history(self, addr, tx_hash, tx_pos, value, tx_height):
         key = self.address_to_key(addr)
         txo = (tx_hash + int_to_hex(tx_pos, 4)).decode('hex')
 
         # write the new history
-        self.add_address(key + txo, value, tx_height)
+        self.add_key(key + txo, value, tx_height)
 
         # backlink
         self.db_addr.put(txo, addr)
@@ -507,10 +488,8 @@ class Storage(object):
     def revert_add_to_history(self, addr, tx_hash, tx_pos, value, tx_height):
         key = self.address_to_key(addr)
         txo = (tx_hash + int_to_hex(tx_pos, 4)).decode('hex')
-
         # delete
-        self.delete_address(key + txo)
-
+        self.delete_key(key + txo)
         # backlink
         self.db_addr.delete(txo)
 
@@ -526,8 +505,7 @@ class Storage(object):
     def set_spent(self, addr, txi, txid, index, height, undo):
         key = self.address_to_key(addr)
         leaf = key + txi
-
-        s = self.delete_address(leaf)
+        s = self.delete_key(leaf)
         value = hex_to_int(s[0:8])
         in_height = hex_to_int(s[8:12])
         undo[leaf] = value, in_height
@@ -553,7 +531,7 @@ class Storage(object):
         self.db_addr.put(txi, addr)
 
         v, height = undo.pop(leaf)
-        self.add_address(leaf, v, height)
+        self.add_key(leaf, v, height)
 
         # revert add to history
         s = self.db_hist.get(addr)

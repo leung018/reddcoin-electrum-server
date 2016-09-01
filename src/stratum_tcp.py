@@ -169,7 +169,7 @@ class TcpServer(threading.Thread):
                     poller.modify(session.raw_connection, READ_WRITE)
                     return
                 else:
-                    raise
+                    raise BaseException(str(err))
             poller.modify(session.raw_connection, READ_ONLY)
             session.handshake = True
 
@@ -205,8 +205,8 @@ class TcpServer(threading.Thread):
 
                 if fd == sock_fd:
                     if flag & (select.POLLIN | select.POLLPRI):
-                        connection, address = sock.accept()
                         try:
+                            connection, address = sock.accept()
                             session = TcpSession(self.dispatcher, connection, address, 
                                                  use_ssl=self.use_ssl, ssl_certfile=self.ssl_certfile, ssl_keyfile=self.ssl_keyfile)
                         except BaseException as e:
@@ -214,21 +214,19 @@ class TcpServer(threading.Thread):
                             connection.close()
                             continue
                         connection = session._connection
-                        connection.setblocking(0)
+                        connection.setblocking(False)
                         self.fd_to_session[connection.fileno()] = session
                         poller.register(connection, READ_ONLY)
-                        try:
-                            check_do_handshake(session)
-                        except BaseException as e:
-                            logger.error('handshake failure:' + str(e) + ' ' + repr(address))
-                            stop_session(connection.fileno())
                     continue
 
                 session = self.fd_to_session[fd]
                 s = session._connection
+
+                # non-blocking handshake
                 try:
                     check_do_handshake(session)
-                except:
+                except BaseException as e:
+                    logger.error('handshake failure:' + str(e) + ' ' + repr(session.address))
                     stop_session(fd)
                     continue
 
@@ -249,6 +247,10 @@ class TcpServer(threading.Thread):
                             logger.error('recv error: ' + repr(x) +' %d'%fd)
                         stop_session(fd)
                         continue
+                    except ValueError as e:
+                        logger.error('recv error: ' + str(e) +' %d'%fd)
+                        stop_session(fd)
+                        continue
                     if data:
                         if len(data) == self.buffer_size:
                             redo.append((fd, flag))
@@ -267,7 +269,7 @@ class TcpServer(threading.Thread):
                         continue
 
                 elif flag & select.POLLHUP:
-                    print_log('client hung up', address)
+                    print_log('client hung up', session.address)
                     stop_session(fd)
 
                 elif flag & select.POLLOUT:
