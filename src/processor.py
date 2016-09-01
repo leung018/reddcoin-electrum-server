@@ -212,7 +212,7 @@ class Session:
         threading.Timer(2, self.info).start()
 
     def key(self):
-        return self.name + self.address
+        return self.address
 
     # Debugging method. Doesn't need to be thread-safe.
     def info(self):
