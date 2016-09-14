@@ -376,12 +376,12 @@ class HttpServer(threading.Thread):
             class StratumThreadedServer(ThreadingMixIn, StratumHTTPSSLServer):
                 pass
             self.server = StratumThreadedServer((self.host, self.port), self.certfile, self.keyfile)
-            print_log("HTTPS server started.")
+            print_log("HTTPS server started on %s:%d" % (self.host, self.port))
         else:
             class StratumThreadedServer(ThreadingMixIn, StratumHTTPServer):
                 pass
             self.server = StratumThreadedServer((self.host, self.port))
-            print_log("HTTP server started.")
+            print_log("HTTP server started on %s:%d" % (self.host, self.port))
 
         self.server.dispatcher = self.dispatcher
         self.server.register_function(None, 'server.stop')
