@@ -31,7 +31,8 @@ setup(
         'electrum_server.processor',
         'electrum_server.version',
         'electrum_server.ircthread',
-        'electrum_server.stratum_tcp'
+        'electrum_server.stratum_tcp',
+        'electrum_server.stratum_http'
     ],
     description="Reddcoin Electrum server",
     author="Thomas Voegtlin, John Nash, Larry Ren",

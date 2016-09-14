@@ -162,6 +162,7 @@ class RequestDispatcher(threading.Thread):
                 self.do_dispatch(session, request)
             except:
                 logger.error('dispatch',exc_info=True)
+            self.collect_garbage()
 
         self.stop()
 
@@ -211,6 +212,15 @@ class RequestDispatcher(threading.Thread):
         with self.lock:
             del self.sessions[key]
 
+    def collect_garbage(self):
+        # only for HTTP sessions.
+        now = time.time()
+        if time.time() - self.lastgc < 60.0:
+            return
+        self.lastgc = now
+        for session in self.sessions.values():
+            if session.name == "HTTP" and (now - session.time) > session.timeout:
+                session.stop()
 
 class Session:
 

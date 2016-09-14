@@ -42,6 +42,7 @@ from electrum_server.processor import Dispatcher, print_log
 from electrum_server.server_processor import ServerProcessor
 from electrum_server.blockchain_processor import BlockchainProcessor
 from electrum_server.stratum_tcp import TcpServer
+from electrum_server.stratum_http import HttpServer
 
 
 logging.basicConfig()
@@ -92,9 +93,13 @@ def create_config(filename=None):
     config.set('server', 'electrum_rpc_port', '8000')
     config.set('server', 'report_host', '')
     config.set('server', 'stratum_tcp_port', '50001')
+    config.set('server', 'stratum_http_port', '')
     config.set('server', 'stratum_tcp_ssl_port', '50002')
+    config.set('server', 'stratum_http_ssl_port', '')
     config.set('server', 'report_stratum_tcp_port', '')
+    config.set('server', 'report_stratum_http_port', '')
     config.set('server', 'report_stratum_tcp_ssl_port', '')
+    config.set('server', 'report_stratum_http_ssl_port', '')
     config.set('server', 'ssl_certfile', '')
     config.set('server', 'ssl_keyfile', '')
     config.set('server', 'irc', 'no')
@@ -230,7 +235,9 @@ def start_server(config):
     utils.init_logger(logfile)
     host = config.get('server', 'host')
     stratum_tcp_port = get_port(config, 'stratum_tcp_port')
+    stratum_http_port = get_port(config, 'stratum_http_port')
     stratum_tcp_ssl_port = get_port(config, 'stratum_tcp_ssl_port')
+    stratum_http_ssl_port = get_port(config, 'stratum_http_ssl_port')
     ssl_certfile = config.get('server', 'ssl_certfile')
     ssl_keyfile = config.get('server', 'ssl_keyfile')
 
@@ -238,6 +245,7 @@ def start_server(config):
 
     if ssl_certfile is '' or ssl_keyfile is '':
         stratum_tcp_ssl_port = None
+        stratum_http_ssl_port = None
 
     print_log("Starting Reddcoin Electrum server on", host)
 
@@ -269,6 +277,14 @@ def start_server(config):
     if stratum_tcp_ssl_port:
         ssl_server = TcpServer(dispatcher, host, stratum_tcp_ssl_port, True, ssl_certfile, ssl_keyfile)
         transports.append(ssl_server)
+
+    if stratum_http_port:
+        http_server = HttpServer(dispatcher, host, stratum_http_port, False, None, None)
+        transports.append(http_server)
+
+    if stratum_http_ssl_port:
+        https_server = HttpServer(dispatcher, host, stratum_http_ssl_port, True, ssl_certfile, ssl_keyfile)
+        transports.append(https_server)
 
     for server in transports:
         server.start()
