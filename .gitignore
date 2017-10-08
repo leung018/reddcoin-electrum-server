@@ -4,3 +4,6 @@
 .gitignore
 electrum.conf
 .idea
+reddcoin_electrum_server.egg-info/
+dist/
+build/
